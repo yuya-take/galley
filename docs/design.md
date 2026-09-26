@@ -259,7 +259,7 @@ sequenceDiagram
 | プロジェクト設定 | `/:project/settings` | 名前、URL、説明、紋章の色、AI への頼み方、アーカイブ |
 | アーカイブ | `/archive` | アーカイブしたプロジェクトと資料の一覧、元に戻す |
 
-`archive`、`connect`、`api`、`mcp` などのトップレベルのパスは、プロジェクトの slug に使えない予約語にする（一覧は `crates/core/src/domain/slug.rs` の `RESERVED_PROJECT_SLUGS`）。
+`archive`、`connect`、`api`、`mcp` などのトップレベルのパスは、プロジェクトの slug に使えない予約語にする（一覧は `crates/core/src/domain/project/slug.rs` の `RESERVED_PROJECT_SLUGS`）。
 
 ### 共通サイドバー
 

@@ -1,5 +1,7 @@
 use crate::domain::{
-    crest_color::CrestColorError, repository::RepositoryError, slug::SlugError, text::TextError,
+    error::RepositoryError,
+    project::CrestColorError,
+    shared::{SlugError, TextError},
 };
 
 /// ユースケースのエラー。画面と MCP はこれを利用者向けの表示に変換する。

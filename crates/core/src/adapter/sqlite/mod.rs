@@ -15,7 +15,7 @@ use std::path::Path;
 pub use document::ToastyDocumentRepository;
 pub use project::ToastyProjectRepository;
 
-use crate::domain::repository::RepositoryError;
+use crate::domain::error::RepositoryError;
 
 /// 起動時に適用するマイグレーション（`crates/core/db/`）。
 static MIGRATIONS: toasty::migration::MigrationSet = toasty::embed_migrations!("db");

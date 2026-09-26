@@ -8,7 +8,7 @@ use jiff::Timestamp;
 use toasty::stmt::Value;
 use uuid::Uuid;
 
-use crate::domain::repository::RepositoryError;
+use crate::domain::error::RepositoryError;
 
 use super::convert::corrupted;
 

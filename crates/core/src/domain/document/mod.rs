@@ -1,13 +1,21 @@
 //! 資料。版（リビジョン）の積み重ねで、`current_revision_id` が「現在版」を指す。
 
+mod query;
+mod repository;
+mod slug;
+mod title;
+
 use jiff::Timestamp;
 
-use super::{
-    crest_color::CrestColor,
-    id::{DocumentId, ProjectId, RevisionId},
-    revision::{NewRevision, Revision, RevisionNumber},
-    slug::{DocumentSlug, ProjectSlug},
-    text::{AuthorName, DocumentTitle, ProjectName, RevisionMessage},
+pub use query::{DocumentOrder, DocumentQuery};
+pub use repository::DocumentRepository;
+pub use slug::{DocumentSlug, RESERVED_DOCUMENT_SLUGS};
+pub use title::{DOCUMENT_TITLE_MAX_CHARS, DocumentTitle};
+
+use crate::domain::{
+    project::{CrestColor, ProjectName, ProjectSlug},
+    revision::{AuthorName, NewRevision, Revision, RevisionMessage, RevisionNumber},
+    shared::{DocumentId, ProjectId, RevisionId},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -5,10 +5,9 @@ use toasty::stmt::{Type, Value};
 use uuid::Uuid;
 
 use crate::domain::{
-    id::ProjectId,
-    project::{Project, ProjectSummary},
-    repository::{ArchiveFilter, ProjectRepository, RepositoryError},
-    slug::ProjectSlug,
+    error::RepositoryError,
+    project::{Project, ProjectRepository, ProjectSlug, ProjectSummary},
+    shared::{ArchiveFilter, ProjectId},
 };
 
 use super::{

@@ -17,15 +17,13 @@ use galley_core::{
     },
     domain::{
         blob::{Blob, BlobHash},
-        document::Document,
-        id::ProjectId,
-        project::Project,
-        repository::{
-            ArchiveFilter, DocumentOrder, DocumentQuery, DocumentRepository, RepositoryError,
+        document::{
+            Document, DocumentOrder, DocumentQuery, DocumentRepository, DocumentSlug, DocumentTitle,
         },
-        revision::{NewRevision, RevisionNumber, RevisionSource},
-        slug::DocumentSlug,
-        text::{AuthorName, DocumentTitle, RevisionMessage},
+        error::RepositoryError,
+        project::Project,
+        revision::{AuthorName, NewRevision, RevisionMessage, RevisionNumber, RevisionSource},
+        shared::{ArchiveFilter, ProjectId},
     },
 };
 use jiff::{Timestamp, ToSpan};

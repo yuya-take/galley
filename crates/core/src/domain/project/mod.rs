@@ -1,13 +1,20 @@
 //! プロジェクト。資料をまとめる入れ物で、アクセス制御の単位ではない。
 
+mod crest_color;
+mod repository;
+mod slug;
+mod text;
+
 use jiff::Timestamp;
 
-use super::{
-    crest_color::CrestColor,
-    id::ProjectId,
-    slug::ProjectSlug,
-    text::{ProjectDescription, ProjectName},
+pub use crest_color::{CrestColor, CrestColorError};
+pub use repository::ProjectRepository;
+pub use slug::{ProjectSlug, RESERVED_PROJECT_SLUGS};
+pub use text::{
+    PROJECT_DESCRIPTION_MAX_CHARS, PROJECT_NAME_MAX_CHARS, ProjectDescription, ProjectName,
 };
+
+use crate::domain::shared::ProjectId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Project {

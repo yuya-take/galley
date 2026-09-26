@@ -1,13 +1,10 @@
 //! Toasty のモデルと domain の型の変換。
 
 use crate::domain::{
-    crest_color::CrestColor,
-    document::Document,
-    id::{DocumentId, ProjectId, RevisionId},
-    project::Project,
-    repository::RepositoryError,
-    slug::{DocumentSlug, ProjectSlug},
-    text::{DocumentTitle, ProjectDescription, ProjectName},
+    document::{Document, DocumentSlug, DocumentTitle},
+    error::RepositoryError,
+    project::{CrestColor, Project, ProjectDescription, ProjectName, ProjectSlug},
+    shared::{DocumentId, ProjectId, RevisionId},
 };
 
 use super::model::{DocumentRecord, ProjectRecord};

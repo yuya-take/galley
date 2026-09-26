@@ -4,10 +4,13 @@ use std::fmt;
 
 use jiff::Timestamp;
 
-use super::{
+mod text;
+
+pub use text::{AUTHOR_NAME_MAX_CHARS, AuthorName, REVISION_MESSAGE_MAX_CHARS, RevisionMessage};
+
+use crate::domain::{
     blob::BlobHash,
-    id::{DocumentId, RevisionId},
-    text::{AuthorName, RevisionMessage},
+    shared::{DocumentId, RevisionId},
 };
 
 /// 版の番号（第N版）。資料ごとに 1 から連番。

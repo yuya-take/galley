@@ -27,6 +27,31 @@ Galley は依存の向きを内側（ドメイン）に揃える。Topcoat は�
 crates/server/src/main.rs   組み立て（adapter を生成して app に渡す）
 ```
 
+## ディレクトリ構成
+
+domain と app は集約（プロジェクト・資料・版など）ごとにフォルダを分け、ユースケースは1ファイルに1つ置く。各フォルダの `mod.rs` で `pub use` して、呼び出し側は `domain::project::ProjectSlug`、`app::project::CreateProject` のように1階層で使う。
+
+```
+crates/core/src/
+├── domain/
+│   ├── shared/        複数の集約で使うもの（ID、slug と文字列の共通の検査、ArchiveFilter）
+│   ├── project/       mod.rs（エンティティ）、slug.rs、crest_color.rs、text.rs、repository.rs
+│   ├── document/      mod.rs、slug.rs、title.rs、query.rs（一覧の条件）、repository.rs
+│   ├── revision/      mod.rs、text.rs（更新者名、変更メモ）
+│   ├── blob.rs
+│   └── error.rs       RepositoryError
+├── app/
+│   ├── error.rs       AppError
+│   ├── project/       create.rs、update.rs、archive.rs、find.rs、list.rs
+│   └── document/      list.rs、find.rs、choose_slug.rs、rename.rs、archive.rs
+└── adapter/
+    └── sqlite/        model.rs（Toasty のモデル）、集約ごとのリポジトリ、convert.rs、raw.rs
+```
+
+- 新しい集約は domain と app に同じ名前のフォルダを作る（例：アップロード検査は `domain/upload/`、版の登録は `app/revision/register.rs`）
+- ユースケースのファイル名は動詞（`create.rs`、`archive.rs`）。同じ集約のユースケースで共有する処理（`load` など）はその集約の `mod.rs` に置く
+- 1つの集約でしか使わない値オブジェクトは、その集約のフォルダに置く。`shared/` には2つ以上の集約で使うものだけ置く
+
 ## 依存方向のルール
 
 - **依存の向き**: adapter → domain ← app ← presentation（常に内側へ）

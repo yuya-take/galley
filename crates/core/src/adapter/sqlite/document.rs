@@ -3,15 +3,14 @@ use toasty::stmt::{Type, Value};
 
 use crate::domain::{
     blob::Blob,
-    crest_color::CrestColor,
-    document::{Document, DocumentListItem},
-    id::{DocumentId, ProjectId},
-    repository::{
-        ArchiveFilter, DocumentOrder, DocumentQuery, DocumentRepository, RepositoryError,
+    document::{
+        Document, DocumentListItem, DocumentOrder, DocumentQuery, DocumentRepository, DocumentSlug,
+        DocumentTitle,
     },
-    revision::{Revision, RevisionNumber},
-    slug::{DocumentSlug, ProjectSlug},
-    text::{AuthorName, DocumentTitle, ProjectName, RevisionMessage},
+    error::RepositoryError,
+    project::{CrestColor, ProjectName, ProjectSlug},
+    revision::{AuthorName, Revision, RevisionMessage, RevisionNumber},
+    shared::{ArchiveFilter, DocumentId, ProjectId},
 };
 
 use super::{
