@@ -57,6 +57,19 @@ maxTurns: 15
 - ドメイン処理が画面（web）やルーター（server）に書かれず、`galley-core` にある
 - 依存のバージョンをルートの `[workspace.dependencies]` で管理している
 
+#### Clean Architecture（`.claude/rules/clean-architecture.md`）
+- 依存の向き: adapter → domain ← app ← presentation（web、server の http・mcp）
+- domain が I/O やフレームワーク（toasty、object_store、axum、topcoat）に依存していないか
+- app や presentation が adapter を直接使っていないか
+
+#### 命名規則（`.claude/rules/naming-conventions.md`）
+- コレクションは複数形、真偽値は `is_` / `has_`、変換は `as_` / `to_` / `into_`
+- 用語（project / document / revision / blob）の対応を崩していないか
+
+#### 画面（`.claude/rules/web-standards.md`）
+- 外部 CDN・外部フォントを読み込んでいないか
+- 言葉づかい（「第5版」「この版に戻す」）とデザイントークンに沿っているか
+
 #### その他
 - TODO/FIXME が新たに追加されていないか
 - 不要な `use` が残っていないか

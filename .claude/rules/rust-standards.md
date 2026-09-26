@@ -25,6 +25,7 @@ paths:
 - ドメイン処理は `galley-core` に置き、画面（web）と MCP（server）の両方から呼ぶ
 - Topcoat は実験段階で破壊的変更が前提なので、Topcoat の型を `galley-core` の公開 API に出さない
 - 依存のバージョンはルートの `[workspace.dependencies]` で管理し、各クレートは `workspace = true` で参照する
+- `galley-core` の中の層（domain / app / adapter）と依存の向きは `.claude/rules/clean-architecture.md`、命名は `.claude/rules/naming-conventions.md` に従う
 
 ## Libraries
 

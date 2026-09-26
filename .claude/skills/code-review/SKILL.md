@@ -46,10 +46,21 @@ git diff --name-only --cached
 - [ ] `println!` / `dbg!` マクロが残っていない（`tracing` を使用）
 - [ ] 関数が50行、ファイルが800行を超えていない
 
+### 画面（HIGH、`crates/web` の変更時）
+
+- [ ] 外部 CDN・外部フォント・外部画像を読み込んでいない（`.claude/rules/web-standards.md`）
+- [ ] 資料は資料配信のオリジンの URL を iframe で埋め込み、アプリのページに資料の HTML を直接差し込んでいない
+- [ ] 状態を変える操作を、独自ヘッダー付きの JSON で送っている
+- [ ] 操作できる要素がボタン・リンクで、アイコンだけのボタンに `aria-label` がある
+- [ ] 色をデザイントークン（CSS 変数）で指定している
+- [ ] 言葉づかい（「第5版」「この版に戻す」など）が揃っている
+
 ### 規約準拠（MEDIUM）
 
 - [ ] `.claude/rules/rust-standards.md` に従う
 - [ ] `galley-core` が Topcoat や `galley-web` に依存していない
+- [ ] 依存の向きが adapter → domain ← app ← presentation になっている（`.claude/rules/clean-architecture.md`）
+- [ ] 命名が `.claude/rules/naming-conventions.md` に従う（コレクションは複数形、真偽値は `is_` / `has_`）
 - [ ] 依存のバージョンをルートの `[workspace.dependencies]` で管理している
 - [ ] TODO/FIXME コメントが新たに追加されていない
 

@@ -35,7 +35,9 @@ gh pr diff $1              # 差分を取得
 - **セキュリティ**: 資料の隔離表示（別オリジン・sandbox・CSP）、CSRF/Host 検査、アップロード検査、ハードコード認証情報
 
 必要に応じて reviewer agent を**並列で**起動して分析を補強する:
-- Rust 変更 → `rust-reviewer` + `security-reviewer`
+- Rust 変更 → `rust-reviewer` + `clean-arch-guard` + `security-reviewer`
+- HTTP ルート・MCP ツール・画面の URL 変更 → `api-spec-reviewer` + `security-reviewer`
+- DB モデル/マイグレーション変更 → `database-reviewer` + `migration-checker`
 - 外部から来た PR（fork）→ 必ず `security-reviewer` も起動する
 
 ## 3. コメント下書き
