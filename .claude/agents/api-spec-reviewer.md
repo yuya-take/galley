@@ -24,7 +24,7 @@ Galley が外に出しているインターフェースが、既存パターン�
 
 ### 1. URL 設計
 - 画面の URL が設計書のパターンに沿っているか
-  - `/`、`/:project`、`/:project/:doc`、`/:project/:doc/v/:number`、`/:project/:doc/history`、`/:project/settings`、`/archive`
+  - `/`、`/:project`、`/:project/:doc`、`/:project/:doc/v/:number`、`/:project/:doc/history`、`/:project/settings`、`/archive`、`/connect`
 - 版を省略した URL は常に最新版、`/v/:number` は特定の版を指す（共有したリンクの意味がぶれない）
 - 新しいトップレベルのパスを足したら、プロジェクト slug の予約語にも追加しているか
 - 資料配信は `/r/:revision_id` のみ
