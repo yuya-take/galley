@@ -1,0 +1,6 @@
+# マイグレーションの設定（galley-migrate が読む）。
+[migration]
+path = "crates/core/db"
+prefix_style = "Sequential"
+checksums = false
+statement_breakpoints = true

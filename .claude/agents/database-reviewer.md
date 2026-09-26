@@ -1,6 +1,6 @@
 ---
 name: database-reviewer
-description: SQLite（Toasty）のスキーマ設計、クエリ、マイグレーション、ブロブ保存との整合性をコードベースからレビュー。crates/core の adapter・migrations の変更後に使用。
+description: SQLite（Toasty）のスキーマ設計、クエリ、マイグレーション、ブロブ保存との整合性をコードベースからレビュー。crates/core の adapter・db（マイグレーション）の変更後に使用。
 tools: Read, Grep, Glob
 model: sonnet
 maxTurns: 15
@@ -13,7 +13,7 @@ DB 関連の変更をコードベースからレビューする。規約は `.cl
 ## 対象ファイル
 
 - `crates/core/src/adapter/**` — Toasty のモデル、リポジトリ実装、ブロブ保存
-- `crates/core/migrations/**` — マイグレーション
+- `crates/core/db/**` — マイグレーション
 - `crates/core/src/app/**` — トランザクション境界
 
 ## レビュープロセス
@@ -35,7 +35,7 @@ DB 関連の変更をコードベースからレビューする。規約は `.cl
 ### スキーマ設計（HIGH）
 
 - [ ] **主キー**: UUID v7
-- [ ] **外部キー**: 制約があり、`PRAGMA foreign_keys = ON` が有効
+- [ ] **参照の整合**: Toasty は外部キー制約を作らないので、ユースケースで参照先の存在を確かめている
 - [ ] **インデックス**: 検索・JOIN に使う列（project_id、document_id、slug、archived_at）にある
 - [ ] **NOT NULL**: 必須列に付いている
 - [ ] **論理削除**: projects・documents は `archived_at` で、物理削除していない
@@ -45,8 +45,8 @@ DB 関連の変更をコードベースからレビューする。規約は `.cl
 
 ### SQLite 固有（HIGH）
 
-- [ ] **WAL モード**: 接続時に `journal_mode = WAL` を設定している
-- [ ] **busy_timeout**: 書き込みの競合で即エラーにならないよう設定している
+- [ ] **WAL モード**: `SqliteDatabase::open` で `journal_mode = WAL` を設定している
+- [ ] **生の SQL の型**: `Uuid`・`Timestamp` を直接渡したり受け取ったりしていない（ドライバーがパニックする。`raw.rs` の変換を使う）
 - [ ] **長いトランザクション**: トランザクション中にブロブの書き込みや外部 I/O をしていない（書き込みは直列なので他を止める）
 
 ### クエリ品質（MEDIUM）

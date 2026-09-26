@@ -20,13 +20,13 @@ maxTurns: 12
 - テーブルの新規作成、列の追加・削除・型変更、インデックス・一意制約・外部キーの追加
 
 ### 3. マイグレーションを確認
-- `crates/core/migrations/` に対応するマイグレーションが追加されているか
+- `crates/core/db/`（`history.toml`、`migrations/`、`snapshots/`）に対応するマイグレーションが追加されているか。作り方は `cargo run -p galley-migrate -- migration generate --name <内容>`
 - 既存（リリース済み）のマイグレーションを書き換えていないか
 - 列の削除・型変更で、既存データの移行が含まれているか
 - revisions・blobs の既存行を書き換える内容になっていないか（不変）
 
 ### 4. 起動時の適用
-- 追加したマイグレーションが起動時の適用対象に含まれているか
+- 追加したマイグレーションが `history.toml` に載っているか（`embed_migrations!` は `history.toml` に載ったものだけを埋め込み、起動時に適用する）
 
 ## 出力
 
