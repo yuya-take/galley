@@ -1,0 +1,19 @@
+[package]
+name = "galley-migrate"
+description = "Galley のマイグレーションを作る開発用ツール（toasty-cli）。配布物には含めない"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+galley-core.workspace = true
+anyhow.workspace = true
+toasty.workspace = true
+toasty-cli.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
