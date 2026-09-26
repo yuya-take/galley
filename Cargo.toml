@@ -14,13 +14,19 @@ publish = false
 galley-core = { path = "crates/core" }
 galley-web = { path = "crates/web" }
 anyhow = "1"
+async-trait = "0.1"
 axum = "0.8.9"
 rmcp = { version = "3.4.1", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
 topcoat = { version = "0.9.0", default-features = false }
 http = "1"
+jiff = "0.2"
+thiserror = "2"
+toasty = { version = "0.11.0", default-features = false, features = ["sqlite", "jiff", "migration"] }
+toasty-cli = "0.11.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "v7"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
