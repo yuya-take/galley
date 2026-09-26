@@ -30,7 +30,8 @@ paths:
 ## Libraries
 
 - **Async Runtime**: `tokio`
-- **Web**: `axum`（資料配信・MCP）、Topcoat（画面）
+- **Web**: `axum`（外側のルーター、MCP、資料配信、Host 検査などの共通ミドルウェア）、Topcoat（画面のみ。Axum の `fallback_service` に `TowerService` として載せる）
+  - Topcoat だけでも MCP・資料配信は作れるが、Topcoat は破壊的変更が多いため、セキュリティの要（資料配信）と公開 API（MCP）は安定した Axum に置く（#5）
 - **MCP**: `rmcp`
 - **DB**: SQLite + `toasty`
 - **Storage**: `object_store`
