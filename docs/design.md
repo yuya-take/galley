@@ -117,7 +117,11 @@ docker run -d -p 8080:8080 -p 8081:8081 -v galley-data:/data ghcr.io/yuya-take/g
 
 SQLite は書き込みが1本ずつ直列になるが、資料の更新頻度なら問題にならない。バックアップは `/data` を丸ごとコピーすれば済み、必要なら Litestream で S3 へ継続バックアップもできる。
 
-待ち受けアドレスは環境変数 `GALLEY_APP_ADDR`（既定 `0.0.0.0:8080`）と `GALLEY_VIEWER_ADDR`（既定 `0.0.0.0:8081`）で変えられる。DB（`galley.db`）と資料の実体を置くディレクトリは `GALLEY_DATA_DIR`（既定はカレントディレクトリの `data`、Docker イメージでは `/data`）。
+待ち受けアドレスは環境変数 `GALLEY_APP_ADDR`（既定 `0.0.0.0:8080`）と `GALLEY_VIEWER_ADDR`（既定 `0.0.0.0:8081`）で変えられる。DB（`galley.db`）と資料の実体を置くディレクトリは `GALLEY_DATA_DIR`（既定はカレントディレクトリの `data`、Docker イメージでは `/data`）。資料の実体はその下の `blobs/ab/cd/<hash>.html` に置く。
+
+資料の実体を S3 互換のストレージに置くときは `GALLEY_BLOB_STORE=s3://<バケット>/<プレフィックス>`（プレフィックスは省略可）を指定する。認証情報とエンドポイントは `AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、`AWS_REGION`、`AWS_ENDPOINT`（MinIO など）、`AWS_ALLOW_HTTP` の環境変数で渡す。`AWS_ALLOW_HTTP` は通信が暗号化されないので、同じマシンや閉じたネットワークの MinIO に使うときだけ有効にする。DB は S3 に置かないので、`GALLEY_DATA_DIR` は引き続き必要。
+
+実体は読み出すたびにハッシュを計算し直し、中身が書き換わっていればエラーにする。
 
 ### Axum と Topcoat の役割分担
 

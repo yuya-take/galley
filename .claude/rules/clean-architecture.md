@@ -38,13 +38,14 @@ crates/core/src/
 │   ├── project/       mod.rs（エンティティ）、slug.rs、crest_color.rs、text.rs、repository.rs
 │   ├── document/      mod.rs、slug.rs、title.rs、query.rs（一覧の条件）、repository.rs
 │   ├── revision/      mod.rs、text.rs（更新者名、変更メモ）
-│   ├── blob.rs
-│   └── error.rs       RepositoryError
+│   ├── blob/          mod.rs（BlobHash、BlobContent）、store.rs（BlobStore）
+│   └── error.rs       RepositoryError、StorageError
 ├── app/
 │   ├── error.rs       AppError
 │   ├── project/       create.rs、update.rs、archive.rs、find.rs、list.rs
 │   └── document/      list.rs、find.rs、choose_slug.rs、rename.rs、archive.rs
 └── adapter/
+    ├── blob_store.rs  ObjectStoreBlobStore（ローカル・S3 互換・メモリ）
     └── sqlite/        model.rs（Toasty のモデル）、集約ごとのリポジトリ、convert.rs、raw.rs
 ```
 

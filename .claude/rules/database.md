@@ -10,7 +10,7 @@ paths:
 
 - **DB**: SQLite（WAL モード）1ファイル。`/data` ボリュームに置く
 - **ORM**: Toasty
-- **資料の実体**: DB には入れず、`object_store` でファイル（既定は `/data/blobs/ab/cd/<hash>.html`）として保存する。DB はハッシュだけ持つ
+- **資料の実体**: DB には入れず、`object_store` でファイル（既定は `/data/blobs/ab/cd/<hash>.html`、置き場所は `BlobHash::storage_key`）として保存する。DB はハッシュだけ持つ
 - 書き込みは直列になるが、資料の更新頻度なら問題にならない前提
 
 ## テーブル
