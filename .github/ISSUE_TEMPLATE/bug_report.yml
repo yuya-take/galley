@@ -1,0 +1,41 @@
+name: バグ報告
+description: 期待どおりに動かない問題を報告する
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        脆弱性は公開の Issue にせず、[SECURITY.md](https://github.com/yuya-take/galley/blob/develop/SECURITY.md) の手順で報告してください。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 何が起きたか
+      description: 起きたことと、本来どうなるべきだったかを書いてください
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 再現手順
+      placeholder: |
+        1. …を開く
+        2. …をクリックする
+        3. …と表示される
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: バージョン
+      description: Docker イメージのタグ、またはコミットのハッシュ
+  - type: input
+    id: environment
+    attributes:
+      label: 環境
+      description: 動かしている環境（Docker / ローカル）、ブラウザ、MCP クライアントなど
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ
+      description: 関係するログがあれば貼ってください
+      render: text
