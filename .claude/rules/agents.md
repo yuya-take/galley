@@ -9,7 +9,7 @@
 | **clean-arch-guard** | 依存方向違反・ユースケースへのビジネスルール流出の検出 | `crates/` 配下の変更後 |
 | **security-reviewer** | セキュリティ脆弱性検出 | アップロード検査・資料配信・CSP・CSRF/Host検査・MCPの変更後 |
 | **api-spec-reviewer** | 画面の URL・HTTP ルート・資料配信・MCP ツールの一貫性 | `crates/server` の http・mcp、`crates/web` のルート変更後 |
-| **database-reviewer** | SQLite のスキーマ・クエリ・トランザクション | `crates/core/src/adapter`・`migrations` の変更後 |
+| **database-reviewer** | SQLite のスキーマ・クエリ・トランザクション | `crates/core/src/adapter`・`crates/core/db` の変更後 |
 | **migration-checker** | マイグレーション漏れ検知 | Toasty のモデル変更後 |
 | **test-runner** | テスト実行と結果分析 | 実装完了後 |
 | **refactor-cleaner** | デッドコード・重複検出 | コード整理時 |

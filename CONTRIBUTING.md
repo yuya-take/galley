@@ -27,7 +27,7 @@ topcoat asset bundle          # 実行ファイルの隣に assets/ を作る
 cargo run -p galley-server
 ```
 
-アプリは http://localhost:8080 、資料配信は http://localhost:8081 で動きます。ポートが空いていないときは、環境変数 `GALLEY_APP_ADDR` / `GALLEY_VIEWER_ADDR` で変えてください（例：`GALLEY_APP_ADDR=127.0.0.1:18080`）。
+アプリは http://localhost:8080 、資料配信は http://localhost:8081 で動きます。ポートが空いていないときは、環境変数 `GALLEY_APP_ADDR` / `GALLEY_VIEWER_ADDR` で変えてください（例：`GALLEY_APP_ADDR=127.0.0.1:18080`）。DB はカレントディレクトリの `data/galley.db` にでき（`GALLEY_DATA_DIR` で変更可）、起動時にマイグレーションが自動で適用されます。
 
 ## PR を出す前に
 
@@ -46,8 +46,17 @@ cargo test --workspace
 | `crates/core` | ドメイン処理（アップロード検査、リビジョン作成、ストレージ） |
 | `crates/web` | 画面（Topcoat） |
 | `crates/server` | 起動処理、ルーター（資料配信・MCP）、バイナリ `galley` |
+| `crates/migrate` | マイグレーションを作る開発用ツール（配布物には含めない） |
 
 `crates/core` は画面やフレームワーク（Topcoat、Axum、rmcp）に依存してはいけません。CI の `architecture` ジョブで検査しています。詳しくは設計書の「クレート構成」を見てください。
+
+### DB のテーブルを変えるとき
+
+`crates/core/src/adapter/sqlite/model.rs` のモデルを変えたら、リポジトリのルートでマイグレーションを作り、`crates/core/db/` の変更をまとめてコミットしてください。
+
+```bash
+cargo run -p galley-migrate -- migration generate --name add_xxx
+```
 
 ## ブランチ運用
 
