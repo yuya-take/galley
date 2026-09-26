@@ -5,7 +5,9 @@
 mod mcp;
 mod viewer;
 
-use std::future::IntoFuture;
+use std::{future::IntoFuture, path::PathBuf};
+
+use galley_core::adapter::sqlite::SqliteDatabase;
 
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
@@ -15,12 +17,22 @@ use tracing_subscriber::EnvFilter;
 
 const DEFAULT_APP_ADDR: &str = "0.0.0.0:8080";
 const DEFAULT_VIEWER_ADDR: &str = "0.0.0.0:8081";
+/// DB と資料の実体を置くディレクトリ。Docker イメージでは `/data` を指定する。
+const DEFAULT_DATA_DIR: &str = "data";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
+
+    let data_dir =
+        PathBuf::from(std::env::var("GALLEY_DATA_DIR").unwrap_or_else(|_| DEFAULT_DATA_DIR.into()));
+    std::fs::create_dir_all(&data_dir)?;
+    let db_path = data_dir.join("galley.db");
+    // 画面と MCP にユースケースを渡すのは #12〜#18。いまは起動時のマイグレーションだけ行う
+    let _database = SqliteDatabase::open(&db_path).await?;
+    tracing::info!("database: {}", db_path.display());
 
     let web = galley_web::service()?;
     let mcp = StreamableHttpService::new(
