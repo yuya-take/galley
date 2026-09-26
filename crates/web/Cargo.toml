@@ -1,0 +1,15 @@
+[package]
+name = "galley-web"
+description = "Galley の画面（Topcoat）"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+galley-core.workspace = true
+
+[lints]
+workspace = true
