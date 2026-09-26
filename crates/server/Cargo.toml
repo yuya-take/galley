@@ -1,0 +1,20 @@
+[package]
+name = "galley-server"
+description = "Galley の起動処理と Axum のルーター（資料配信・MCP）"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "galley"
+path = "src/main.rs"
+
+[dependencies]
+galley-core.workspace = true
+galley-web.workspace = true
+
+[lints]
+workspace = true
