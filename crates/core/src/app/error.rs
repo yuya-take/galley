@@ -1,5 +1,5 @@
 use crate::domain::{
-    error::RepositoryError,
+    error::{RepositoryError, StorageError},
     project::CrestColorError,
     shared::{SlugError, TextError},
 };
@@ -21,6 +21,8 @@ pub enum AppError {
     ProjectSlugTaken(String),
     #[error(transparent)]
     Repository(RepositoryError),
+    #[error(transparent)]
+    Storage(#[from] StorageError),
 }
 
 impl From<RepositoryError> for AppError {

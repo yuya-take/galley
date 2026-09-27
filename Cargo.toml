@@ -21,6 +21,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal
 topcoat = { version = "0.9.0", default-features = false }
 http = "1"
 jiff = "0.2"
+object_store = { version = "0.14.2", default-features = false, features = ["fs", "aws"] }
+sha2 = "0.11"
 thiserror = "2"
 toasty = { version = "0.11.0", default-features = false, features = ["sqlite", "jiff", "migration"] }
 toasty-cli = "0.11.0"

@@ -5,9 +5,12 @@
 mod mcp;
 mod viewer;
 
-use std::{future::IntoFuture, path::PathBuf};
+use std::{
+    future::IntoFuture,
+    path::{Path, PathBuf},
+};
 
-use galley_core::adapter::sqlite::SqliteDatabase;
+use galley_core::adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase};
 
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
@@ -30,9 +33,10 @@ async fn main() -> anyhow::Result<()> {
         PathBuf::from(std::env::var("GALLEY_DATA_DIR").unwrap_or_else(|_| DEFAULT_DATA_DIR.into()));
     std::fs::create_dir_all(&data_dir)?;
     let db_path = data_dir.join("galley.db");
-    // 画面と MCP にユースケースを渡すのは #12〜#18。いまは起動時のマイグレーションだけ行う
+    // 画面と MCP にユースケースを渡すのは #12〜#18。いまは DB のマイグレーションと保存先の準備だけ行う
     let _database = SqliteDatabase::open(&db_path).await?;
     tracing::info!("database: {}", db_path.display());
+    let _blobs = open_blob_store(&data_dir)?;
 
     let web = galley_web::service()?;
     let mcp = StreamableHttpService::new(
@@ -59,4 +63,20 @@ async fn main() -> anyhow::Result<()> {
         axum::serve(viewer_listener, viewer).into_future(),
     )?;
     Ok(())
+}
+
+/// 資料の実体の保存先を開く。`GALLEY_BLOB_STORE` に `s3://` の URL があれば S3 互換のストレージ、
+/// 無ければ `<GALLEY_DATA_DIR>/blobs` に置く。
+fn open_blob_store(data_dir: &Path) -> anyhow::Result<ObjectStoreBlobStore> {
+    match std::env::var("GALLEY_BLOB_STORE") {
+        Ok(url) if !url.is_empty() => {
+            tracing::info!("blobs: {url}");
+            Ok(ObjectStoreBlobStore::s3(&url)?)
+        }
+        _ => {
+            let root = data_dir.join("blobs");
+            tracing::info!("blobs: {}", root.display());
+            Ok(ObjectStoreBlobStore::local(&root)?)
+        }
+    }
 }
