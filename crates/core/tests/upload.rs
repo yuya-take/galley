@@ -570,7 +570,10 @@ fn deeply_nested_css_does_not_overflow_stack() {
 #[test]
 fn deeply_nested_elements_do_not_overflow_stack() {
     let depth = 300_000;
-    let html = format!("{}<img src=https://example.com/a.png>", "<div><svg><g>".repeat(depth));
+    let html = format!(
+        "{}<img src=https://example.com/a.png>",
+        "<div><svg><g>".repeat(depth)
+    );
     assert_eq!(kinds(&html), vec![Image]);
 }
 
