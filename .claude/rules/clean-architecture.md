@@ -39,6 +39,7 @@ crates/core/src/
 │   ├── document/      mod.rs、slug.rs、title.rs、query.rs（一覧の条件）、repository.rs
 │   ├── revision/      mod.rs、text.rs（更新者名、変更メモ）
 │   ├── blob/          mod.rs（BlobHash、BlobContent）、store.rs（BlobStore）
+│   ├── upload/        mod.rs（HtmlDocument、UploadError）、scan.rs（HTML）、css.rs、script.rs、url.rs、resource.rs
 │   └── error.rs       RepositoryError、StorageError
 ├── app/
 │   ├── error.rs       AppError
@@ -57,7 +58,7 @@ crates/core/src/
 
 - **依存の向き**: adapter → domain ← app ← presentation（常に内側へ）
 - **domain**: I/O をしない。`toasty`・`object_store`・`axum`・`topcoat`・`rmcp`・`tokio` に依存しない
-  - 許可: `serde`、`uuid`、`thiserror`、`sha2`、HTML の解析（`lol_html` / `html5ever`）など、純粋な計算のクレート
+  - 許可: `serde`、`uuid`、`thiserror`、`sha2`、`base64`、HTML・CSS の解析（`lol_html`、`cssparser`、`htmlize`）など、純粋な計算のクレート
 - **app**: domain のトレイト経由でだけ DB とストレージを使う。`adapter` を直接使わない
 - **presentation**（web、server の http・mcp）: `app` のユースケースを呼ぶだけ。`adapter` や `toasty` を直接使わない
 - **組み立て**: `crates/server/src/main.rs` だけが adapter を生成し、app に注入してよい
