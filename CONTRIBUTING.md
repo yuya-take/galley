@@ -27,7 +27,7 @@ topcoat asset bundle          # 実行ファイルの隣に assets/ を作る
 cargo run -p galley-server
 ```
 
-アプリは http://localhost:8080 、資料配信は http://localhost:8081 で動きます。ポートが空いていないときは、環境変数 `GALLEY_APP_ADDR` / `GALLEY_VIEWER_ADDR` で変えてください（例：`GALLEY_APP_ADDR=127.0.0.1:18080`）。DB はカレントディレクトリの `data/galley.db`、資料の実体は `data/blobs/` にでき（`GALLEY_DATA_DIR` で変更可）、起動時にマイグレーションが自動で適用されます。
+アプリは http://localhost:8080 、資料配信は http://localhost:8081 で動きます。ポートが空いていないときは、環境変数 `GALLEY_APP_ADDR` / `GALLEY_VIEWER_ADDR` で変えてください（例：`GALLEY_APP_ADDR=127.0.0.1:18080`）。DB はカレントディレクトリの `data/galley.db`、資料の実体は `data/blobs/` にでき（`GALLEY_DATA_DIR` で変更可）、起動時にマイグレーションが自動で適用されます。`ALLOWED_HOSTS` を指定しなければ localhost からのアクセスだけを受け付けます（ほかの PC から開くときは `ALLOWED_HOSTS=192.168.1.10` のように指定）。
 
 ## PR を出す前に
 

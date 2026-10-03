@@ -117,7 +117,7 @@ docker run -d -p 8080:8080 -p 8081:8081 -v galley-data:/data ghcr.io/yuya-take/g
 
 SQLite は書き込みが1本ずつ直列になるが、資料の更新頻度なら問題にならない。バックアップは `/data` を丸ごとコピーすれば済み、必要なら Litestream で S3 へ継続バックアップもできる。
 
-待ち受けアドレスは環境変数 `GALLEY_APP_ADDR`（既定 `0.0.0.0:8080`）と `GALLEY_VIEWER_ADDR`（既定 `0.0.0.0:8081`）で変えられる。資料配信に別のホスト名を割り当てるときは `GALLEY_VIEWER_URL` を指定する（「表示用オリジン」）。DB（`galley.db`）と資料の実体を置くディレクトリは `GALLEY_DATA_DIR`（既定はカレントディレクトリの `data`、Docker イメージでは `/data`）。資料の実体はその下の `blobs/ab/cd/<hash>.html` に置く。
+待ち受けアドレスは環境変数 `GALLEY_APP_ADDR`（既定 `0.0.0.0:8080`）と `GALLEY_VIEWER_ADDR`（既定 `0.0.0.0:8081`）で変えられる。資料配信に別のホスト名を割り当てるときは `GALLEY_VIEWER_URL` を指定する（「表示用オリジン」）。ほかの PC から使うときは、アクセスに使うホスト名を `ALLOWED_HOSTS` に指定する（「ネットワークの前提と、外部サイトからの攻撃への対策」）。DB（`galley.db`）と資料の実体を置くディレクトリは `GALLEY_DATA_DIR`（既定はカレントディレクトリの `data`、Docker イメージでは `/data`）。資料の実体はその下の `blobs/ab/cd/<hash>.html` に置く。
 
 資料の実体を S3 互換のストレージに置くときは `GALLEY_BLOB_STORE=s3://<バケット>/<プレフィックス>`（プレフィックスは省略可）を指定する。認証情報とエンドポイントは `AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、`AWS_REGION`、`AWS_ENDPOINT`（MinIO など）、`AWS_ALLOW_HTTP` の環境変数で渡す。`AWS_ALLOW_HTTP` は通信が暗号化されないので、同じマシンや閉じたネットワークの MinIO に使うときだけ有効にする。DB は S3 に置かないので、`GALLEY_DATA_DIR` は引き続き必要。
 
@@ -179,10 +179,15 @@ Topcoat のアセット（`$()` 式のスクリプト、フォントなど）は
 
 インターネットには公開しない前提にする。ただしログインがなくても、社員が外部の悪意あるサイトを開いたとき、そのサイトがブラウザ経由で社内のアプリにリクエストを送れてしまう。そのため次の対策は必須にする。
 
-- CSRF 対策：状態を変えるリクエスト（POST など）は Origin ヘッダーがアプリ自身の場合だけ受け付け、さらに独自ヘッダー付きの JSON リクエストに限る
-  - Topcoat のルーターは標準の OriginPolicy で、別オリジンからの状態を変えるリクエストを 403 で拒否する。ただし Origin ヘッダーのないリクエスト（curl など）は通すので、独自ヘッダーと JSON の検査は自前で入れる
-- DNS リバインディング対策：Host ヘッダーを設定済みのホスト名（環境変数 `ALLOWED_HOSTS`）と照合し、一致しなければ拒否する
-  - Topcoat には Host 検査がないので、Axum のミドルウェアとしてアプリ・資料配信・MCP のすべてに入れる
+- CSRF 対策：状態を変えるリクエスト（GET・HEAD・OPTIONS 以外）は、Origin ヘッダーがあればアプリ自身の場合だけ受け付け、POST は JSON（`Content-Type: application/json`）に限る。`Sec-Fetch-Site` が `same-origin` 以外なら拒否する（Axum のミドルウェア。`/mcp` を含むアプリのすべて）
+  - JSON の POST は CORS の単純リクエストではないので、ブラウザーは別のサイトから送る前に preflight を行い、許可しなければ送らない。フォームから送れる POST（`application/x-www-form-urlencoded` など）は JSON の条件で断る
+  - 独自ヘッダーは求めない。Topcoat の画面の操作（手続きの呼び出し）は独自ヘッダーを付けずに JSON の POST で送るため。JSON の条件で preflight が必要になるので、独自ヘッダーと同じ効果がある
+  - Origin の無いリクエスト（curl、MCP のクライアント）は通す。ブラウザーは POST などに必ず Origin を付けるので、CSRF にはならない
+  - Topcoat のルーターの OriginPolicy（別オリジンからの状態を変えるリクエストを 403 で拒否）も効いたままにする
+- DNS リバインディング対策：Host ヘッダーを設定済みのホスト名（環境変数 `ALLOWED_HOSTS`）と照合し、一致しなければ 403 で拒否する
+  - `ALLOWED_HOSTS` はカンマ区切りのホスト名（例：`galley.internal,192.168.1.10`）。ポートは見ない（付いていれば無視する）
+  - `GALLEY_VIEWER_URL` を指定していれば、そのホスト名も受け付ける
+  - Topcoat には Host 検査がないので、Axum のミドルウェアとしてアプリ・資料配信・MCP のすべてに入れる。資料配信で断るレスポンスにも CSP などのヘッダーを付ける
   - rmcp は独自に Host を検査し、既定では loopback しか通さない。`ALLOWED_HOSTS` を rmcp の `allowed_hosts` にも渡す
 - `ALLOWED_HOSTS` が未設定のときは localhost からのアクセスだけを受け付け、起動ログで設定を促す
 
@@ -424,6 +429,7 @@ MCP クライアントは社内ネットワークから直接つなぐもの（C
 | サイドバーのプロジェクトは作成順に並べる | 名前順は漢字の読みの順にならない | #6 |
 | アーカイブしたプロジェクト・資料には登録できない | 一覧に出ないものが更新され続けると気づけない。戻してから登録すれば済む | #9 |
 | SQLite への書き込みはアプリの中で1本ずつにする | Toasty の SQLite ドライバーはロックを待つ間 tokio のワーカーを塞ぐため、同時の書き込みが重なると止まる。1プロセスで動かすので、アプリの中の順番待ちで足りる | #9 |
+| CSRF 対策で独自ヘッダーは求めず、JSON の POST と Origin で守る | Topcoat の画面の操作は独自ヘッダーを付けずに JSON の POST で送る。JSON の POST はブラウザーが別のサイトから送る前に preflight を行うので、独自ヘッダーと同じ効果がある | #11 |
 | アップロード検査の HTML の解析は lol_html にする | 要素と属性の元の位置（バイト位置）が取れ、行番号と該当するコードを正確に返せる。`<style>`・`<script>` の中身の扱い（RAWTEXT など）もブラウザーと同じ。属性値は文字参照のまま返るので htmlize で戻す | #8 |
 
 ## 未決事項
