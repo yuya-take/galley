@@ -1471,6 +1471,7 @@ dependencies = [
  "http",
  "http-body-util",
  "rmcp",
+ "thiserror",
  "tokio",
  "tower",
  "tracing",
