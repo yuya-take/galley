@@ -195,6 +195,70 @@ fn is_json(headers: &HeaderMap) -> bool {
         })
 }
 
+/// MCP のトークン（環境変数 `MCP_TOKEN`）。設定したときだけ `Authorization: Bearer` を求める。
+#[derive(Clone)]
+pub struct McpToken(Option<String>);
+
+impl McpToken {
+    pub fn from_env(value: Option<String>) -> Self {
+        Self(value.map(|v| v.trim().to_owned()).filter(|v| !v.is_empty()))
+    }
+
+    pub fn is_required(&self) -> bool {
+        self.0.is_some()
+    }
+
+    fn accepts(&self, headers: &HeaderMap) -> bool {
+        let Some(expected) = &self.0 else {
+            return true;
+        };
+        headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .is_some_and(|given| constant_time_eq(given.trim().as_bytes(), expected.as_bytes()))
+    }
+}
+
+impl fmt::Debug for McpToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // トークンをログに出さない
+        f.write_str(if self.is_required() {
+            "McpToken(****)"
+        } else {
+            "McpToken(None)"
+        })
+    }
+}
+
+/// 比べる時間から一致した長さを推測されないよう、すべてのバイトを比べる。
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
+}
+
+/// `MCP_TOKEN` を設定していれば、`Authorization: Bearer <トークン>` が無いリクエストを 401 で断る。
+pub async fn check_mcp_token(
+    State(token): State<Arc<McpToken>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if token.accepts(request.headers()) {
+        return next.run(request).await;
+    }
+    (
+        StatusCode::UNAUTHORIZED,
+        [
+            (header::WWW_AUTHENTICATE, "Bearer"),
+            (header::CONTENT_TYPE, "text/plain; charset=utf-8"),
+        ],
+        "MCP のトークンが違います。接続設定の Authorization: Bearer を確認してください",
+    )
+        .into_response()
+}
+
 fn forbidden(message: &'static str) -> Response {
     (
         StatusCode::FORBIDDEN,
@@ -406,6 +470,35 @@ mod tests {
             .await,
             StatusCode::FORBIDDEN
         );
+    }
+
+    #[test]
+    fn mcp_token_is_optional_and_compared_exactly() {
+        let headers = |value: &str| {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                header::AUTHORIZATION,
+                value.parse().unwrap_or_else(|e| panic!("{e}")),
+            );
+            headers
+        };
+        let none = McpToken::from_env(None);
+        assert!(none.accepts(&HeaderMap::new()));
+        assert!(!McpToken::from_env(Some("  ".to_owned())).is_required());
+
+        let token = McpToken::from_env(Some("s3cret".to_owned()));
+        assert!(token.accepts(&headers("Bearer s3cret")));
+        assert!(!token.accepts(&HeaderMap::new()));
+        for value in [
+            "Bearer s3cre",
+            "Bearer s3cret2",
+            "Basic s3cret",
+            "s3cret",
+            "Bearer ",
+        ] {
+            assert!(!token.accepts(&headers(value)), "{value}");
+        }
+        assert_eq!(format!("{token:?}"), "McpToken(****)");
     }
 
     #[tokio::test]
