@@ -35,6 +35,8 @@ slug は英小文字・数字・ハイフンだけ。資料の slug はファイ
 - **時刻**: UTC で保存する
 - **外部キー**: Toasty は外部キー制約を作らず、接続ごとの PRAGMA（`foreign_keys` など）も設定できない。参照の整合はユースケースで保つ（存在を確かめてから作る、物理削除しない）
 - **WAL**: `SqliteDatabase::open` で `PRAGMA journal_mode = WAL` を1回実行する（DB ファイルに記録される）。`busy_timeout` は rusqlite の既定（5秒）
+- **書き込みは1本ずつ**: 書き込むメソッドは最初に `WriteLock::acquire` で順番待ちする。読んでから書くトランザクションは `begin_write`（`BEGIN IMMEDIATE`）で始める
+- **版番号**: 現在版の番号 + 1。`(document_id, number)` の一意制約で重なりを `Conflict` にし、ユースケースが読み直してやり直す（`app::revision` の `MAX_ATTEMPTS` 回）
 
 ## 保存の順序
 
@@ -55,4 +57,6 @@ slug は英小文字・数字・ハイフンだけ。資料の slug はファイ
 
 - 結合・`EXISTS`・集計が要るクエリは `toasty::sql::query` の生の SQL で書く。値は必ずプレースホルダー（`?1`、`?2` …）で渡し、文字列に埋め込まない
 - 生の SQL で `Uuid` や `Timestamp` を渡したり型を指定して受け取ったりすると、SQLite ドライバーがエラーではなくパニック（`todo!()`）になる。`adapter/sqlite/raw.rs` の変換を使い、UUID はバイト列、日時は文字列（小数9桁固定の RFC 3339）で扱う
+- SQLite ドライバーは接続ごとのタスクの中で同期的に SQLite を呼ぶので、ロックを待つ接続が tokio のワーカーを塞ぐ。同時の書き込みが重なると、ロックを持つ接続が進めずに「database is locked」になる。書き込みは必ず `WriteLock` を通す
+- `TransactionMode` は `toasty` から再公開されていないので `toasty-core` から使う
 - 一意制約の違反は Toasty が区別しないので、SQLite のメッセージ（`UNIQUE constraint failed`）で `RepositoryError::Conflict` に変換する

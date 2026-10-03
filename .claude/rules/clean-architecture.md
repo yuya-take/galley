@@ -37,14 +37,15 @@ crates/core/src/
 │   ├── shared/        複数の集約で使うもの（ID、slug と文字列の共通の検査、ArchiveFilter）
 │   ├── project/       mod.rs（エンティティ）、slug.rs、crest_color.rs、text.rs、repository.rs
 │   ├── document/      mod.rs、slug.rs、title.rs、query.rs（一覧の条件）、repository.rs
-│   ├── revision/      mod.rs、text.rs（更新者名、変更メモ）
+│   ├── revision/      mod.rs、text.rs（更新者名、変更メモ）、repository.rs
 │   ├── blob/          mod.rs（BlobHash、BlobContent）、store.rs（BlobStore）
 │   ├── upload/        mod.rs（HtmlDocument、UploadError）、scan.rs（HTML）、css.rs、script.rs、url.rs、resource.rs
 │   └── error.rs       RepositoryError、StorageError
 ├── app/
 │   ├── error.rs       AppError
 │   ├── project/       create.rs、update.rs、archive.rs、find.rs、list.rs
-│   └── document/      list.rs、find.rs、choose_slug.rs、rename.rs、archive.rs
+│   ├── document/      create.rs（第1版の登録）、list.rs、find.rs、choose_slug.rs、rename.rs、archive.rs
+│   └── revision/      add.rs（新しい版）、revert.rs（この版に戻す）
 └── adapter/
     ├── blob_store.rs  ObjectStoreBlobStore（ローカル・S3 互換・メモリ）
     └── sqlite/        model.rs（Toasty のモデル）、集約ごとのリポジトリ、convert.rs、raw.rs
