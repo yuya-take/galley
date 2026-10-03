@@ -4,6 +4,7 @@
 //! `galley-server` は [`service`] の戻り値を Axum の fallback に載せるだけで、
 //! Topcoat の API を直接使わない。
 
+pub mod host;
 mod viewer_url;
 
 pub use viewer_url::{ViewerUrl, ViewerUrlError};
