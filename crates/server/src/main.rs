@@ -7,10 +7,17 @@ mod viewer;
 
 use std::{
     future::IntoFuture,
+    net::SocketAddr,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
-use galley_core::adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase};
+use anyhow::Context as _;
+use galley_core::{
+    adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
+    app::revision::ReadRevisionContent,
+};
+use galley_web::ViewerUrl;
 
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
@@ -33,10 +40,10 @@ async fn main() -> anyhow::Result<()> {
         PathBuf::from(std::env::var("GALLEY_DATA_DIR").unwrap_or_else(|_| DEFAULT_DATA_DIR.into()));
     std::fs::create_dir_all(&data_dir)?;
     let db_path = data_dir.join("galley.db");
-    // 画面と MCP にユースケースを渡すのは #12〜#18。いまは DB のマイグレーションと保存先の準備だけ行う
-    let _database = SqliteDatabase::open(&db_path).await?;
+    // 画面と MCP にユースケースを渡すのは #12〜#18
+    let database = SqliteDatabase::open(&db_path).await?;
     tracing::info!("database: {}", db_path.display());
-    let _blobs = open_blob_store(&data_dir)?;
+    let blobs = Arc::new(open_blob_store(&data_dir)?);
 
     let web = galley_web::service()?;
     let mcp = StreamableHttpService::new(
@@ -49,11 +56,17 @@ async fn main() -> anyhow::Result<()> {
     let app = axum::Router::new()
         .nest_service("/mcp", mcp)
         .fallback_service(web);
-    let viewer = viewer::router();
+    let viewer = viewer::router(Arc::new(ReadRevisionContent::new(
+        Arc::new(database.revisions()),
+        blobs,
+    )));
 
     let app_addr = std::env::var("GALLEY_APP_ADDR").unwrap_or_else(|_| DEFAULT_APP_ADDR.into());
     let viewer_addr =
         std::env::var("GALLEY_VIEWER_ADDR").unwrap_or_else(|_| DEFAULT_VIEWER_ADDR.into());
+    // 画面の iframe に入れる URL。画面に渡すのは #15
+    let viewer_url = viewer_url(&app_addr, &viewer_addr)?;
+    tracing::info!("viewer url: {viewer_url}");
     let app_listener = TcpListener::bind(&app_addr).await?;
     let viewer_listener = TcpListener::bind(&viewer_addr).await?;
     tracing::info!("app: http://{app_addr}, viewer: http://{viewer_addr}");
@@ -63,6 +76,30 @@ async fn main() -> anyhow::Result<()> {
         axum::serve(viewer_listener, viewer).into_future(),
     )?;
     Ok(())
+}
+
+/// 資料配信の URL。`GALLEY_VIEWER_URL` があればそれを、無ければアプリと同じホスト名で
+/// 資料配信のポートにする。
+///
+/// 資料をアプリと同じオリジンで表示すると隔離が効かないので、同じポートなら起動を止める。
+fn viewer_url(app_addr: &str, viewer_addr: &str) -> anyhow::Result<ViewerUrl> {
+    if let Ok(url) = std::env::var("GALLEY_VIEWER_URL")
+        && !url.is_empty()
+    {
+        return Ok(ViewerUrl::parse(&url)?);
+    }
+    let port = |name: &str, addr: &str| {
+        addr.parse::<SocketAddr>()
+            .map(|a| a.port())
+            .with_context(|| format!("{name}「{addr}」を読めません"))
+    };
+    let app_port = port("GALLEY_APP_ADDR", app_addr)?;
+    let viewer_port = port("GALLEY_VIEWER_ADDR", viewer_addr)?;
+    anyhow::ensure!(
+        app_port != viewer_port,
+        "資料配信はアプリと別のポートにしてください（どちらも {app_port}）"
+    );
+    Ok(ViewerUrl::SameHost { port: viewer_port })
 }
 
 /// 資料の実体の保存先を開く。`GALLEY_BLOB_STORE` に `s3://` の URL があれば S3 互換のストレージ、

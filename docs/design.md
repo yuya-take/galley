@@ -117,7 +117,7 @@ docker run -d -p 8080:8080 -p 8081:8081 -v galley-data:/data ghcr.io/yuya-take/g
 
 SQLite は書き込みが1本ずつ直列になるが、資料の更新頻度なら問題にならない。バックアップは `/data` を丸ごとコピーすれば済み、必要なら Litestream で S3 へ継続バックアップもできる。
 
-待ち受けアドレスは環境変数 `GALLEY_APP_ADDR`（既定 `0.0.0.0:8080`）と `GALLEY_VIEWER_ADDR`（既定 `0.0.0.0:8081`）で変えられる。DB（`galley.db`）と資料の実体を置くディレクトリは `GALLEY_DATA_DIR`（既定はカレントディレクトリの `data`、Docker イメージでは `/data`）。資料の実体はその下の `blobs/ab/cd/<hash>.html` に置く。
+待ち受けアドレスは環境変数 `GALLEY_APP_ADDR`（既定 `0.0.0.0:8080`）と `GALLEY_VIEWER_ADDR`（既定 `0.0.0.0:8081`）で変えられる。資料配信に別のホスト名を割り当てるときは `GALLEY_VIEWER_URL` を指定する（「表示用オリジン」）。DB（`galley.db`）と資料の実体を置くディレクトリは `GALLEY_DATA_DIR`（既定はカレントディレクトリの `data`、Docker イメージでは `/data`）。資料の実体はその下の `blobs/ab/cd/<hash>.html` に置く。
 
 資料の実体を S3 互換のストレージに置くときは `GALLEY_BLOB_STORE=s3://<バケット>/<プレフィックス>`（プレフィックスは省略可）を指定する。認証情報とエンドポイントは `AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、`AWS_REGION`、`AWS_ENDPOINT`（MinIO など）、`AWS_ALLOW_HTTP` の環境変数で渡す。`AWS_ALLOW_HTTP` は通信が暗号化されないので、同じマシンや閉じたネットワークの MinIO に使うときだけ有効にする。DB は S3 に置かないので、`GALLEY_DATA_DIR` は引き続き必要。
 
@@ -167,12 +167,13 @@ Topcoat のアセット（`$()` 式のスクリプト、フォントなど）は
 
 ### 表示用オリジン
 
-- 既定は同じコンテナの別ポート（アプリ :8080、資料 :8081）。ポートが違えば別オリジンになる
-- リバースプロキシを置くときは、アプリと資料に別々のホスト名を割り当てる
+- 既定は同じコンテナの別ポート（アプリ :8080、資料 :8081）。ポートが違えば別オリジンになる。iframe の URL はアプリへのリクエストと同じホスト名に資料配信のポートを付けて作る
+- リバースプロキシを置くときは、アプリと資料に別々のホスト名を割り当て、資料のほうを環境変数 `GALLEY_VIEWER_URL`（例：`https://galley-docs.example.com`。パスは付けない）で指定する。既定の URL は `http://` なので、HTTPS で公開するときも `GALLEY_VIEWER_URL` が必要
+- `GALLEY_VIEWER_URL` が無く、アプリと資料配信のポートが同じなら起動しない（同じオリジンになり隔離が効かないため）
 
 ### 資料の配信 URL
 
-ログインがないので署名付きトークンは使わず、リビジョン ID で直接配信する（例：`http://<資料ホスト>:8081/r/<revision_id>`）。リビジョンは変更されないので、長めのキャッシュを付けられる。
+ログインがないので署名付きトークンは使わず、リビジョン ID で直接配信する（例：`http://<資料ホスト>:8081/r/<revision_id>`）。リビジョンは変更されないので、`Cache-Control: public, max-age=31536000, immutable` を付ける。ID は小文字・ハイフン区切りの表記だけ受け付け、同じ版に URL が何通りもできないようにする。アーカイブした資料の版も配信する（アーカイブから戻せるため）。
 
 ### ネットワークの前提と、外部サイトからの攻撃への対策
 
@@ -195,6 +196,7 @@ Content-Security-Policy: sandbox allow-scripts; default-src 'none'; script-src '
 ```
 
 - `X-Content-Type-Options: nosniff` と `Content-Type: text/html; charset=utf-8` を付ける
+- CSP・`nosniff`・`Referrer-Policy: no-referrer` は 404 や 405 を含む資料配信のすべてのレスポンスに付ける（Axum のミドルウェア）。エラーは `Cache-Control: no-store`。エラーの本文は、ブラウザーで直接開かれるので JSON ではなく素のテキスト（「資料が見つかりません」など）にする
 
 CSP では iframe 自身が別 URL へ遷移すること（URL にデータを載せる送り出し）までは防げない。fetch や画像読み込みによる送信、CDN の改ざんといった主な経路は止められる。
 

@@ -1469,8 +1469,10 @@ dependencies = [
  "galley-core",
  "galley-web",
  "http",
+ "http-body-util",
  "rmcp",
  "tokio",
+ "tower",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1480,6 +1482,7 @@ name = "galley-web"
 version = "0.1.0"
 dependencies = [
  "galley-core",
+ "thiserror",
  "topcoat",
 ]
 
