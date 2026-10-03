@@ -16,6 +16,13 @@ pub use text::{
 
 use crate::domain::shared::ProjectId;
 
+/// プロジェクトに資料を登録できないとき。
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ProjectError {
+    #[error("アーカイブしたプロジェクトには資料を登録できません。先にアーカイブから戻してください")]
+    Archived,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Project {
     pub id: ProjectId,
@@ -70,6 +77,14 @@ impl Project {
 
     pub fn is_archived(&self) -> bool {
         self.archived_at.is_some()
+    }
+
+    /// 新しい資料を登録できるか。アーカイブしたプロジェクトには登録できない。
+    pub fn ensure_accepts_documents(&self) -> Result<(), ProjectError> {
+        if self.is_archived() {
+            return Err(ProjectError::Archived);
+        }
+        Ok(())
     }
 
     /// アーカイブする。すでにアーカイブ済みなら日時を変えない。

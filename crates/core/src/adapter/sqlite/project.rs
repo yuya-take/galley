@@ -11,7 +11,7 @@ use crate::domain::{
 };
 
 use super::{
-    backend_error,
+    WriteLock, backend_error,
     convert::corrupted,
     model::ProjectRecord,
     raw::{int, uuid},
@@ -20,11 +20,12 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct ToastyProjectRepository {
     db: toasty::Db,
+    writes: WriteLock,
 }
 
 impl ToastyProjectRepository {
-    pub(super) fn new(db: toasty::Db) -> Self {
-        Self { db }
+    pub(super) fn new(db: toasty::Db, writes: WriteLock) -> Self {
+        Self { db, writes }
     }
 
     /// アーカイブしていない資料の件数をプロジェクトごとに数える。
@@ -57,6 +58,7 @@ impl ToastyProjectRepository {
 #[async_trait]
 impl ProjectRepository for ToastyProjectRepository {
     async fn insert(&self, project: &Project) -> Result<(), RepositoryError> {
+        let _write = self.writes.acquire().await;
         let mut db = self.db.clone();
         ProjectRecord::create()
             .id(project.id.as_uuid())
@@ -73,6 +75,7 @@ impl ProjectRepository for ToastyProjectRepository {
     }
 
     async fn update(&self, project: &Project) -> Result<(), RepositoryError> {
+        let _write = self.writes.acquire().await;
         let mut db = self.db.clone();
         ProjectRecord::filter_by_id(project.id.as_uuid())
             .update()

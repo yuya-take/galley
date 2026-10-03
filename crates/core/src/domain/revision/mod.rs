@@ -4,8 +4,10 @@ use std::fmt;
 
 use jiff::Timestamp;
 
+mod repository;
 mod text;
 
+pub use repository::RevisionRepository;
 pub use text::{AUTHOR_NAME_MAX_CHARS, AuthorName, REVISION_MESSAGE_MAX_CHARS, RevisionMessage};
 
 use crate::domain::{
@@ -33,6 +35,12 @@ impl RevisionNumber {
 
     pub fn get(self) -> u32 {
         self.0
+    }
+
+    /// 次の版の番号。
+    pub fn next(self) -> Self {
+        // 1つの資料で 40 億回登録することはないので、上限では止めるだけにする
+        Self(self.0.saturating_add(1))
     }
 }
 
@@ -101,6 +109,12 @@ mod tests {
     fn number_starts_at_one() {
         assert_eq!(RevisionNumber::new(0), Err(RevisionNumberError));
         assert_eq!(RevisionNumber::new(1), Ok(RevisionNumber::FIRST));
+    }
+
+    #[test]
+    fn next_number_counts_up() {
+        assert_eq!(RevisionNumber::FIRST.next().get(), 2);
+        assert_eq!(RevisionNumber(u32::MAX).next().get(), u32::MAX);
     }
 
     #[test]

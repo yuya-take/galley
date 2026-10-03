@@ -36,19 +36,26 @@ impl ChooseDocumentSlug {
         project_id: ProjectId,
         source: &SlugSource,
     ) -> Result<DocumentSlug, AppError> {
-        let base = match source {
-            SlugSource::FileName(name) => DocumentSlug::from_file_name(name),
-            SlugSource::Requested(slug) => Some(DocumentSlug::parse(slug)?),
-            SlugSource::None => None,
-        }
-        .unwrap_or_else(|| DocumentSlug::generated(random_u32()));
-
-        let taken = self
-            .documents
-            .slugs_with_prefix(project_id, base.as_str())
-            .await?;
-        Ok(base.first_available(|slug| taken.contains(slug)))
+        choose_slug(self.documents.as_ref(), project_id, source).await
     }
+}
+
+pub(super) async fn choose_slug(
+    documents: &dyn DocumentRepository,
+    project_id: ProjectId,
+    source: &SlugSource,
+) -> Result<DocumentSlug, AppError> {
+    let base = match source {
+        SlugSource::FileName(name) => DocumentSlug::from_file_name(name),
+        SlugSource::Requested(slug) => Some(DocumentSlug::parse(slug)?),
+        SlugSource::None => None,
+    }
+    .unwrap_or_else(|| DocumentSlug::generated(random_u32()));
+
+    let taken = documents
+        .slugs_with_prefix(project_id, base.as_str())
+        .await?;
+    Ok(base.first_available(|slug| taken.contains(slug)))
 }
 
 /// slug 用の短い乱数。乱数のためだけに依存を増やさないよう、UUID v4 の乱数部分を使う。

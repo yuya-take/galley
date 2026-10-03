@@ -1443,6 +1443,7 @@ dependencies = [
  "sha2 0.11.0",
  "thiserror",
  "toasty",
+ "toasty-core",
  "tokio",
  "tracing",
  "uuid",
