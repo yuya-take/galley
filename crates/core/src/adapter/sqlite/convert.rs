@@ -1,13 +1,15 @@
 //! Toasty のモデルと domain の型の変換。
 
 use crate::domain::{
+    blob::BlobHash,
     document::{Document, DocumentSlug, DocumentTitle},
     error::RepositoryError,
     project::{CrestColor, Project, ProjectDescription, ProjectName, ProjectSlug},
+    revision::{AuthorName, Revision, RevisionMessage, RevisionNumber, RevisionSource},
     shared::{DocumentId, ProjectId, RevisionId},
 };
 
-use super::model::{DocumentRecord, ProjectRecord};
+use super::model::{DocumentRecord, ProjectRecord, RevisionRecord};
 
 /// 保存済みの値を domain の型に読み直せなかったときのエラー。
 pub(super) fn corrupted(column: &str, err: impl std::fmt::Display) -> RepositoryError {
@@ -45,6 +47,33 @@ impl TryFrom<DocumentRecord> for Document {
             archived_at: record.archived_at,
             created_at: record.created_at,
             updated_at: record.updated_at,
+        })
+    }
+}
+
+impl TryFrom<RevisionRecord> for Revision {
+    type Error = RepositoryError;
+
+    fn try_from(record: RevisionRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: RevisionId::from_uuid(record.id),
+            document_id: DocumentId::from_uuid(record.document_id),
+            number: RevisionNumber::new(record.number)
+                .map_err(|e| corrupted("revisions.number", e))?,
+            blob_hash: BlobHash::parse(&record.blob_hash)
+                .map_err(|e| corrupted("revisions.blob_hash", e))?,
+            message: RevisionMessage::parse(&record.message)
+                .map_err(|e| corrupted("revisions.message", e))?,
+            author_name: AuthorName::parse(&record.author_name)
+                .map_err(|e| corrupted("revisions.author_name", e))?,
+            source: RevisionSource::parse(&record.source)
+                .map_err(|e| corrupted("revisions.source", e))?,
+            restored_from: record
+                .restored_from_number
+                .map(RevisionNumber::new)
+                .transpose()
+                .map_err(|e| corrupted("revisions.restored_from_number", e))?,
+            created_at: record.created_at,
         })
     }
 }

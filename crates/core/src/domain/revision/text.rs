@@ -12,6 +12,13 @@ text_value!(
     RevisionMessage, "変更メモ", REVISION_MESSAGE_MAX_CHARS, allow_empty = true
 );
 
+impl RevisionMessage {
+    /// 「この版に戻す」で作った版の変更メモ（「第2版の内容に戻す」）。
+    pub fn reverted_to(number: super::RevisionNumber) -> Self {
+        Self(format!("第{number}版の内容に戻す"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -28,6 +35,15 @@ mod tests {
                 field: "更新者の名前",
                 max: AUTHOR_NAME_MAX_CHARS
             })
+        );
+    }
+
+    #[test]
+    fn reverted_message_names_the_number() {
+        let number = super::super::RevisionNumber::new(2).unwrap();
+        assert_eq!(
+            RevisionMessage::reverted_to(number).as_str(),
+            "第2版の内容に戻す"
         );
     }
 

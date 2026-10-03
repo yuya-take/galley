@@ -9,11 +9,13 @@ mod document;
 pub mod model;
 mod project;
 mod raw;
+mod revision;
 
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 pub use document::ToastyDocumentRepository;
 pub use project::ToastyProjectRepository;
+pub use revision::ToastyRevisionRepository;
 
 use crate::domain::error::RepositoryError;
 
@@ -33,6 +35,22 @@ pub fn models() -> toasty::ModelSet {
 #[derive(Debug, Clone)]
 pub struct SqliteDatabase {
     db: toasty::Db,
+    writes: WriteLock,
+}
+
+/// 書き込みを1本ずつにする。
+///
+/// Toasty の SQLite ドライバーは接続ごとのタスクの中で同期的に SQLite を呼ぶので、ロックを待つ接続が
+/// tokio のワーカーを塞ぐ。待つ接続が増えるとロックを持つ接続が進めず、待ち時間（5秒）を過ぎて
+/// 「database is locked」になる。アプリの中で書き込みを順番待ちにして、SQLite のロックを待たせない。
+/// 読み出しは WAL なので書き込みを待たない。
+#[derive(Debug, Clone, Default)]
+pub(super) struct WriteLock(Arc<tokio::sync::Mutex<()>>);
+
+impl WriteLock {
+    pub(super) async fn acquire(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.0.lock().await
+    }
 }
 
 impl SqliteDatabase {
@@ -42,7 +60,10 @@ impl SqliteDatabase {
             .models(models())
             .connect(&format!("sqlite:{}", path.display()))
             .await?;
-        let mut database = Self { db };
+        let mut database = Self {
+            db,
+            writes: WriteLock::default(),
+        };
         database.enable_wal().await?;
         database.migrate().await?;
         Ok(database)
@@ -54,17 +75,24 @@ impl SqliteDatabase {
             .models(models())
             .connect("sqlite::memory:")
             .await?;
-        let database = Self { db };
+        let database = Self {
+            db,
+            writes: WriteLock::default(),
+        };
         database.migrate().await?;
         Ok(database)
     }
 
     pub fn projects(&self) -> ToastyProjectRepository {
-        ToastyProjectRepository::new(self.db.clone())
+        ToastyProjectRepository::new(self.db.clone(), self.writes.clone())
     }
 
     pub fn documents(&self) -> ToastyDocumentRepository {
-        ToastyDocumentRepository::new(self.db.clone())
+        ToastyDocumentRepository::new(self.db.clone(), self.writes.clone())
+    }
+
+    pub fn revisions(&self) -> ToastyRevisionRepository {
+        ToastyRevisionRepository::new(self.db.clone())
     }
 
     /// 現在のジャーナルモード（`wal` など）。

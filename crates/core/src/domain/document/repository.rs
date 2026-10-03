@@ -20,6 +20,17 @@ pub trait DocumentRepository: Send + Sync {
         blob: &Blob,
     ) -> Result<(), RepositoryError>;
 
+    /// 新しい版と、資料の現在版・更新日時を1トランザクションで保存する。
+    /// ブロブの情報は渡されたときだけ、同じハッシュが無ければ保存する（戻す操作では渡さない）。
+    ///
+    /// 同じ番号の版が既にある（同時に別の版が追加された）ときは [`RepositoryError::Conflict`] を返す。
+    async fn insert_revision(
+        &self,
+        document: &Document,
+        revision: &Revision,
+        blob: Option<&Blob>,
+    ) -> Result<(), RepositoryError>;
+
     /// 資料名とアーカイブの状態を保存する。版と現在版は変えない。
     async fn update(&self, document: &Document) -> Result<(), RepositoryError>;
 

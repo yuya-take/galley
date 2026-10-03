@@ -19,11 +19,12 @@ object_store.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 toasty.workspace = true
+toasty-core.workspace = true
+tokio = { workspace = true, features = ["sync"] }
 tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
 
 [lints]
 workspace = true

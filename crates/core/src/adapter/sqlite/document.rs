@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use toasty::stmt::{Type, Value};
+use toasty_core::driver::operation::TransactionMode;
 
 use crate::domain::{
     blob::Blob,
@@ -14,7 +15,7 @@ use crate::domain::{
 };
 
 use super::{
-    backend_error,
+    WriteLock, backend_error,
     convert::corrupted,
     model::{BlobRecord, DocumentRecord, RevisionRecord},
     raw::{int, string, timestamp, timestamp_param, uuid, uuid_param},
@@ -23,12 +24,68 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct ToastyDocumentRepository {
     db: toasty::Db,
+    writes: WriteLock,
 }
 
 impl ToastyDocumentRepository {
-    pub(super) fn new(db: toasty::Db) -> Self {
-        Self { db }
+    pub(super) fn new(db: toasty::Db, writes: WriteLock) -> Self {
+        Self { db, writes }
     }
+}
+
+/// 書き込みのトランザクションを始める。呼ぶ前に必ず `WriteLock` を取る。
+///
+/// プロセスの中の書き込みを1本ずつにするのは `WriteLock` で、ここで最初に書き込みのロックを取る
+/// （`BEGIN IMMEDIATE`）のは、ほかのプロセス（バックアップのツールなど）と重なったときの備え。
+/// 読んでから書く途中でロックを取ろうとすると、待たずに失敗する（SQLITE_BUSY）ため。
+async fn begin_write(db: &mut toasty::Db) -> Result<toasty::Transaction<'_>, RepositoryError> {
+    db.transaction_builder()
+        .mode(TransactionMode::Immediate)
+        .begin()
+        .await
+        .map_err(backend_error)
+}
+
+/// ブロブの情報を保存する。同じハッシュがあれば何もしない。
+async fn insert_blob_if_missing(
+    tx: &mut toasty::Transaction<'_>,
+    blob: &Blob,
+) -> Result<(), RepositoryError> {
+    let existing = BlobRecord::filter_by_hash(blob.hash.as_str())
+        .first()
+        .exec(tx)
+        .await
+        .map_err(backend_error)?;
+    if existing.is_none() {
+        BlobRecord::create()
+            .hash(blob.hash.as_str())
+            .size(blob.size)
+            .created_at(blob.created_at)
+            .exec(tx)
+            .await
+            .map_err(backend_error)?;
+    }
+    Ok(())
+}
+
+async fn insert_revision_record(
+    tx: &mut toasty::Transaction<'_>,
+    revision: &Revision,
+) -> Result<(), RepositoryError> {
+    RevisionRecord::create()
+        .id(revision.id.as_uuid())
+        .document_id(revision.document_id.as_uuid())
+        .number(revision.number.get())
+        .blob_hash(revision.blob_hash.as_str())
+        .message(revision.message.as_str())
+        .author_name(revision.author_name.as_str())
+        .source(revision.source.as_str())
+        .restored_from_number(revision.restored_from.map(RevisionNumber::get))
+        .created_at(revision.created_at)
+        .exec(tx)
+        .await
+        .map_err(backend_error)?;
+    Ok(())
 }
 
 #[async_trait]
@@ -39,24 +96,10 @@ impl DocumentRepository for ToastyDocumentRepository {
         revision: &Revision,
         blob: &Blob,
     ) -> Result<(), RepositoryError> {
+        let _write = self.writes.acquire().await;
         let mut db = self.db.clone();
-        let mut tx = db.transaction().await.map_err(backend_error)?;
-
-        let existing_blob = BlobRecord::filter_by_hash(blob.hash.as_str())
-            .first()
-            .exec(&mut tx)
-            .await
-            .map_err(backend_error)?;
-        if existing_blob.is_none() {
-            BlobRecord::create()
-                .hash(blob.hash.as_str())
-                .size(blob.size)
-                .created_at(blob.created_at)
-                .exec(&mut tx)
-                .await
-                .map_err(backend_error)?;
-        }
-
+        let mut tx = begin_write(&mut db).await?;
+        insert_blob_if_missing(&mut tx, blob).await?;
         DocumentRecord::create()
             .id(document.id.as_uuid())
             .project_id(document.project_id.as_uuid())
@@ -69,25 +112,36 @@ impl DocumentRepository for ToastyDocumentRepository {
             .exec(&mut tx)
             .await
             .map_err(backend_error)?;
+        insert_revision_record(&mut tx, revision).await?;
+        tx.commit().await.map_err(backend_error)
+    }
 
-        RevisionRecord::create()
-            .id(revision.id.as_uuid())
-            .document_id(revision.document_id.as_uuid())
-            .number(revision.number.get())
-            .blob_hash(revision.blob_hash.as_str())
-            .message(revision.message.as_str())
-            .author_name(revision.author_name.as_str())
-            .source(revision.source.as_str())
-            .restored_from_number(revision.restored_from.map(RevisionNumber::get))
-            .created_at(revision.created_at)
+    async fn insert_revision(
+        &self,
+        document: &Document,
+        revision: &Revision,
+        blob: Option<&Blob>,
+    ) -> Result<(), RepositoryError> {
+        let _write = self.writes.acquire().await;
+        let mut db = self.db.clone();
+        let mut tx = begin_write(&mut db).await?;
+        if let Some(blob) = blob {
+            insert_blob_if_missing(&mut tx, blob).await?;
+        }
+        // (document_id, number) の一意制約で、同時に追加された版との番号の重なりを Conflict にする
+        insert_revision_record(&mut tx, revision).await?;
+        DocumentRecord::filter_by_id(document.id.as_uuid())
+            .update()
+            .current_revision_id(document.current_revision_id.as_uuid())
+            .updated_at(document.updated_at)
             .exec(&mut tx)
             .await
             .map_err(backend_error)?;
-
         tx.commit().await.map_err(backend_error)
     }
 
     async fn update(&self, document: &Document) -> Result<(), RepositoryError> {
+        let _write = self.writes.acquire().await;
         let mut db = self.db.clone();
         DocumentRecord::filter_by_id(document.id.as_uuid())
             .update()

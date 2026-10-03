@@ -53,7 +53,10 @@ fn slug_conflict(slug: &ProjectSlug) -> impl FnOnce(RepositoryError) -> AppError
     }
 }
 
-async fn load(projects: &dyn ProjectRepository, id: ProjectId) -> Result<Project, AppError> {
+pub(super) async fn load(
+    projects: &dyn ProjectRepository,
+    id: ProjectId,
+) -> Result<Project, AppError> {
     projects
         .find_by_id(id)
         .await?

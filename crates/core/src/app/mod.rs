@@ -3,3 +3,4 @@
 pub mod document;
 pub mod error;
 pub mod project;
+pub mod revision;
