@@ -111,7 +111,7 @@ docker run -d -p 8080:8080 -p 8081:8081 -v galley-data:/data ghcr.io/yuya-take/g
 | MCP | [rmcp](https://crates.io/crates/rmcp)（Streamable HTTP） |
 | DB | SQLite（WAL モード）+ [Toasty](https://github.com/tokio-rs/toasty) |
 | ファイル保存 | object_store クレート（既定はローカル、設定で S3 互換に切替） |
-| アップロード処理 | sha2、HTML の解析に lol_html または html5ever |
+| アップロード処理 | sha2、HTML の解析に lol_html、CSS の解析に cssparser、文字参照の復元に htmlize |
 | ログ | tracing |
 | Rust | 1.98（`rust-toolchain.toml` で固定） |
 
@@ -200,12 +200,17 @@ CSP では iframe 自身が別 URL へ遷移すること（URL にデータを�
 
 ### アップロード時の検査
 
-- 受け付けるのは UTF-8 の HTML 1ファイルのみ。サイズ上限を設ける（Chart.js などを埋め込むと数百 KB、画像入りなら数 MB になる前提で決める。#21）
+- 受け付けるのは UTF-8 の HTML 1ファイルのみ。サイズ上限を設ける（Chart.js などを埋め込むと数百 KB、画像入りなら数 MB になる前提で決める。#21。いまは仮に 10MB）
 - 登録時に外部リソースの読み込みを検出し、登録を拒否して該当箇所（行番号、種類、該当するコード）を返す。ただの参考リンク（a の href）は拒否しない
   - 種類は「スクリプト」「スタイルシート」「Web フォント」「画像」「埋め込み（iframe など）」のように、利用者が分かる言葉で返す
   - 画面では該当箇所の一覧と、見つかった種類に合わせた AI への依頼文（例：「Chart.js、Web フォント、画像を外部から読み込まず、すべてを HTML の中に埋め込んだ、1ファイルで完結する HTML に作り直してください」）を表示する
   - script・img・iframe などの `src`、`srcset`、link の `href`、`poster`、object の `data`、CSS の `url()` と `@import`（style 要素と style 属性の両方）、`<base>`、`<meta http-equiv="refresh">`
-  - `data:` と `blob:` は許可する
+  - SVG の `href` / `xlink:href`（`<image>`、`<use>` など）と `fill="url(...)"` などの属性、古い `background` 属性
+  - インラインのスクリプトの `import ... from "https://..."`・`import("...")` と、インポートマップの URL（実行時に組み立てる URL は見つけられないので、CSP に任せる）
+  - `data:` と `blob:` は許可する。ただし `data:` の中身が HTML・SVG・CSS・JavaScript なら、`<iframe srcdoc>` と同じく中も調べる（3段まで）
+  - 相対 URL（`logo.png`）は資料配信のオリジンから読み込もうとするので外部として扱う。`#id` への参照は許可する
+  - `<noscript>` の中は調べない。資料はスクリプトを有効にして表示するので、中身は描画されない
+- 属性値の文字参照（`h&#116;tps:`）や CSS のエスケープ（`\75 rl(`）でもすり抜けないよう、HTML は lol_html で、CSS は cssparser で字句解析し、文字参照は htmlize で戻してから判定する
 - MCP から拒否した場合は「外部リソースを含まない単一 HTML にしてください」という理由を返し、AI がそのまま作り直せるようにする
 - 検査は利便性のためで、最終的な防御は表示側の CSP が担う
 
@@ -409,6 +414,7 @@ MCP クライアントは社内ネットワークから直接つなぐもの（C
 | 画面は「Galley 画面設計」のキャンバスに合わせる。カード表示・サムネイル・全文検索は将来に回す | MVP の範囲を絞る | |
 | Toasty を使い続ける。外部キー制約は持たず、参照の整合はユースケースで保つ | Toasty 0.11 は外部キー制約を作らず接続ごとの PRAGMA も設定できないが、物理削除をしないので整合は崩れにくい。結合や集計は生の SQL で補える。DB の処理は adapter に閉じているので、困ったら sqlx などに差し替えられる | #6 |
 | サイドバーのプロジェクトは作成順に並べる | 名前順は漢字の読みの順にならない | #6 |
+| アップロード検査の HTML の解析は lol_html にする | 要素と属性の元の位置（バイト位置）が取れ、行番号と該当するコードを正確に返せる。`<style>`・`<script>` の中身の扱い（RAWTEXT など）もブラウザーと同じ。属性値は文字参照のまま返るので htmlize で戻す | #8 |
 
 ## 未決事項
 

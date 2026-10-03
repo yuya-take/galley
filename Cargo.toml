@@ -15,12 +15,16 @@ galley-core = { path = "crates/core" }
 galley-web = { path = "crates/web" }
 anyhow = "1"
 async-trait = "0.1"
+base64 = "0.22"
 axum = "0.8.9"
 rmcp = { version = "3.4.1", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
 topcoat = { version = "0.9.0", default-features = false }
 http = "1"
 jiff = "0.2"
+lol_html = "3.0.1"
+htmlize = { version = "1.1.0", features = ["unescape"] }
+cssparser = "0.38.0"
 object_store = { version = "0.14.2", default-features = false, features = ["fs", "aws"] }
 sha2 = "0.11"
 thiserror = "2"

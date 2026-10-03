@@ -9,3 +9,4 @@ pub mod error;
 pub mod project;
 pub mod revision;
 pub mod shared;
+pub mod upload;
