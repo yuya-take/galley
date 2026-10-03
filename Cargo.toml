@@ -15,7 +15,7 @@ galley-core = { path = "crates/core" }
 galley-web = { path = "crates/web" }
 anyhow = "1"
 async-trait = "0.1"
-base64 = "0.22"
+base64 = "0.23"
 axum = "0.8.9"
 rmcp = { version = "3.4.1", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
