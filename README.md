@@ -27,6 +27,27 @@ docker run -d -p 8080:8080 -p 8081:8081 -v galley-data:/data ghcr.io/yuya-take/g
 
 インターネットには公開せず、社内ネットワークで使う前提です。環境変数などの詳しい使い方は、リリースに合わせて書きます。
 
+### AI から登録する（MCP）
+
+Claude Code などの MCP クライアントから、資料の一覧・取得・登録・更新ができます。更新者名は `X-Author-Name` ヘッダーで渡します（登録した資料の更新者として残ります）。
+
+```bash
+claude mcp add --transport http galley http://galley.example.com:8080/mcp \
+  --header "X-Author-Name: 佐藤"
+```
+
+- サーバーに `MCP_TOKEN` を設定したときは、`--header "Authorization: Bearer <トークン>"` も付けます
+- ほかの PC から使うときは、サーバーの `ALLOWED_HOSTS` にホスト名（上の例なら `galley.example.com`）を入れます
+- 登録できるのは、外部リソース（CDN のスクリプト、Web フォント、外部の画像など）を読み込まない1ファイルの HTML だけです
+
+| ツール | 内容 |
+| --- | --- |
+| `list_projects` | プロジェクトの一覧 |
+| `list_documents` | プロジェクト内の資料の一覧（資料名、最新の版番号、URL） |
+| `get_document` | 資料の情報と、指定した版（`revision`。省略時は最新）の HTML。過去の版なら URL も `/v/<番号>` 付き |
+| `create_document` | 新しい資料を第1版として登録する（`slug` は省略可） |
+| `update_document` | 既存の資料に新しい版を追加する（`message` に何を変えたか） |
+
 ## ドキュメント
 
 - [設計書](docs/design.md)：目的、データモデル、システム構成、セキュリティ、画面、MCP

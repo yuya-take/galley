@@ -2,6 +2,8 @@
 //!
 //! 画面と MCP（:8080）、資料配信（:8081）を同じプロセスで立ち上げる。
 
+mod app;
+mod guard;
 mod mcp;
 mod viewer;
 
@@ -17,11 +19,7 @@ use galley_core::{
     adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
     app::revision::ReadRevisionContent,
 };
-use galley_web::ViewerUrl;
-
-use rmcp::transport::streamable_http_server::{
-    StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
-};
+use galley_web::{AppUrl, ViewerUrl};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
@@ -40,33 +38,49 @@ async fn main() -> anyhow::Result<()> {
         PathBuf::from(std::env::var("GALLEY_DATA_DIR").unwrap_or_else(|_| DEFAULT_DATA_DIR.into()));
     std::fs::create_dir_all(&data_dir)?;
     let db_path = data_dir.join("galley.db");
-    // 画面と MCP にユースケースを渡すのは #12〜#18
+    // 画面にユースケースを渡すのは #13〜#18
     let database = SqliteDatabase::open(&db_path).await?;
     tracing::info!("database: {}", db_path.display());
     let blobs = Arc::new(open_blob_store(&data_dir)?);
-
-    let web = galley_web::service()?;
-    let mcp = StreamableHttpService::new(
-        || Ok(mcp::GalleyMcp::new()),
-        LocalSessionManager::default().into(),
-        StreamableHttpServerConfig::default(),
-    );
-
-    // /mcp 以外はすべて Topcoat の画面に渡す
-    let app = axum::Router::new()
-        .nest_service("/mcp", mcp)
-        .fallback_service(web);
-    let viewer = viewer::router(Arc::new(ReadRevisionContent::new(
-        Arc::new(database.revisions()),
-        blobs,
-    )));
 
     let app_addr = std::env::var("GALLEY_APP_ADDR").unwrap_or_else(|_| DEFAULT_APP_ADDR.into());
     let viewer_addr =
         std::env::var("GALLEY_VIEWER_ADDR").unwrap_or_else(|_| DEFAULT_VIEWER_ADDR.into());
     // 画面の iframe に入れる URL。画面に渡すのは #15
-    let viewer_url = viewer_url(&app_addr, &viewer_addr)?;
+    let viewer_url = viewer_url_from_env(&app_addr, &viewer_addr)?;
     tracing::info!("viewer url: {viewer_url}");
+    let allowed_hosts = Arc::new(allowed_hosts_from_env(&viewer_url)?);
+
+    let app_url = app_url_from_env()?;
+    tracing::info!("app url: {app_url}");
+
+    let web = galley_web::service()?;
+    let mcp_token = Arc::new(guard::McpToken::from_env(std::env::var("MCP_TOKEN").ok()));
+    if mcp_token.is_required() {
+        tracing::info!("MCP は Authorization: Bearer のトークンを求めます");
+    }
+    let app = app::app_router(
+        web,
+        app::mcp_app(
+            app::Ports {
+                projects: Arc::new(database.projects()),
+                documents: Arc::new(database.documents()),
+                revisions: Arc::new(database.revisions()),
+                blobs: blobs.clone(),
+            },
+            app_url,
+        ),
+        &allowed_hosts,
+        mcp_token,
+    );
+    let viewer = viewer::router(
+        Arc::new(ReadRevisionContent::new(
+            Arc::new(database.revisions()),
+            blobs,
+        )),
+        allowed_hosts,
+    );
+
     let app_listener = TcpListener::bind(&app_addr).await?;
     let viewer_listener = TcpListener::bind(&viewer_addr).await?;
     tracing::info!("app: http://{app_addr}, viewer: http://{viewer_addr}");
@@ -78,11 +92,37 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// アプリの画面の URL（MCP が返す資料ビューアのリンク）。`GALLEY_APP_URL` が無ければリクエストの Host から作る。
+fn app_url_from_env() -> anyhow::Result<AppUrl> {
+    match std::env::var("GALLEY_APP_URL") {
+        Ok(url) if !url.is_empty() => Ok(AppUrl::parse(&url)?),
+        _ => Ok(AppUrl::FromRequest),
+    }
+}
+
+/// 受け付けるホスト名（DNS リバインディング対策）。`ALLOWED_HOSTS` が未設定なら localhost だけ。
+/// `GALLEY_VIEWER_URL` を指定していれば、そのホスト名も加える。
+fn allowed_hosts_from_env(viewer_url: &ViewerUrl) -> anyhow::Result<guard::AllowedHosts> {
+    let configured = std::env::var("ALLOWED_HOSTS").ok();
+    let mut hosts = guard::AllowedHosts::parse(configured.as_deref())?;
+    if let Some(authority) = viewer_url.fixed_authority() {
+        hosts = hosts.with(authority);
+    }
+    if hosts.is_default() {
+        tracing::warn!(
+            "ALLOWED_HOSTS が未設定のため、localhost からのアクセスだけを受け付けます。\
+             ほかの PC から使うときは ALLOWED_HOSTS=galley.example.com のようにホスト名を指定してください"
+        );
+    }
+    tracing::info!("allowed hosts: {hosts}");
+    Ok(hosts)
+}
+
 /// 資料配信の URL。`GALLEY_VIEWER_URL` があればそれを、無ければアプリと同じホスト名で
 /// 資料配信のポートにする。
 ///
 /// 資料をアプリと同じオリジンで表示すると隔離が効かないので、同じポートなら起動を止める。
-fn viewer_url(app_addr: &str, viewer_addr: &str) -> anyhow::Result<ViewerUrl> {
+fn viewer_url_from_env(app_addr: &str, viewer_addr: &str) -> anyhow::Result<ViewerUrl> {
     if let Ok(url) = std::env::var("GALLEY_VIEWER_URL")
         && !url.is_empty()
     {
