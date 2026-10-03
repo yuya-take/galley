@@ -1,9 +1,11 @@
-//! 版のユースケース（新しい版の追加、過去の版に戻す）。新しい資料の第1版は `document::CreateDocument`。
+//! 版のユースケース（新しい版の追加、過去の版に戻す、版の HTML を読む）。新しい資料の第1版は `document::CreateDocument`。
 
 mod add;
+mod read;
 mod revert;
 
 pub use add::AddRevision;
+pub use read::{ReadRevisionContent, RevisionContent};
 pub use revert::RevertToRevision;
 
 use jiff::Timestamp;
