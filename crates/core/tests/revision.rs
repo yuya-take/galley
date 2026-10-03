@@ -8,7 +8,9 @@ use galley_core::{
         document::{ArchiveDocument, CreateDocument, CreateDocumentInput, SlugSource},
         error::AppError,
         project::{ArchiveProject, CreateProject, ProjectInput},
-        revision::{AddRevision, RegisteredRevision, RevertToRevision, RevisionInput},
+        revision::{
+            AddRevision, FindRevision, RegisteredRevision, RevertToRevision, RevisionInput,
+        },
     },
     domain::{
         blob::{BlobHash, BlobStore},
@@ -363,6 +365,25 @@ async fn revert_rejects_archived_document() -> TestResult {
             .execute(created.document.id, 1, "鈴木", RevisionSource::Web)
             .await,
         Err(AppError::Document(DocumentError::Archived))
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn find_revision_defaults_to_latest() -> TestResult {
+    let fx = Fixture::new().await?;
+    let created = fx.create("plan.html", V1).await?;
+    let added = fx.add(created.document.id, V2).await?;
+    let find = FindRevision::new(Arc::new(fx.database.revisions()));
+
+    assert_eq!(find.execute(&added.document, None).await?, added.revision);
+    assert_eq!(
+        find.execute(&added.document, Some(1)).await?,
+        created.revision
+    );
+    assert!(matches!(
+        find.execute(&added.document, Some(9)).await,
+        Err(AppError::RevisionNotFound)
     ));
     Ok(())
 }
