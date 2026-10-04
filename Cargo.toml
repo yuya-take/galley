@@ -15,7 +15,7 @@ galley-core = { path = "crates/core" }
 galley-web = { path = "crates/web" }
 anyhow = "1"
 async-trait = "0.1"
-base64 = "0.22"
+base64 = "0.23"
 axum = "0.8.9"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
