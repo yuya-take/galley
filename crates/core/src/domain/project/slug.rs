@@ -6,7 +6,7 @@ use crate::domain::shared::{Slug, SlugError};
 
 /// プロジェクトの slug に使えない語。`/archive` などトップレベルのパスと衝突する。
 pub const RESERVED_PROJECT_SLUGS: &[&str] = &[
-    "archive", "connect", "api", "mcp", "settings", "assets", "static", "health",
+    "archive", "connect", "api", "mcp", "settings", "assets", "static", "health", "new",
 ];
 
 /// プロジェクトの slug。予約語（[`RESERVED_PROJECT_SLUGS`]）は使えない。
