@@ -19,16 +19,20 @@ use galley_core::{
     domain::shared::RevisionId,
 };
 
+use crate::guard::{AllowedHosts, check_host};
+
 pub const CSP: &str = "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'";
 
 /// 版は変更されないので、ブラウザーに長く持たせる。
 const CACHE_IMMUTABLE: &str = "public, max-age=31536000, immutable";
 
-pub fn router(read: Arc<ReadRevisionContent>) -> Router {
+/// Host の検査で断ったレスポンスにも同じヘッダーを付けるよう、ヘッダーを一番外に置く。
+pub fn router(read: Arc<ReadRevisionContent>, allowed_hosts: Arc<AllowedHosts>) -> Router {
     Router::new()
         .route("/r/{revision_id}", get(serve_revision))
         .fallback(not_found)
         .with_state(read)
+        .layer(middleware::from_fn_with_state(allowed_hosts, check_host))
         .layer(middleware::map_response(security_headers))
 }
 
@@ -150,13 +154,24 @@ mod tests {
             Arc::new(database.revisions()),
             blobs,
         ));
-        Ok((router(read), created.revision.id))
+        let allowed = Arc::new(AllowedHosts::parse(None)?);
+        Ok((router(read, allowed), created.revision.id))
     }
 
     async fn send(router: &Router, method: &str, uri: &str) -> Result<Response, Box<dyn Error>> {
+        send_to(router, method, uri, "localhost:8081").await
+    }
+
+    async fn send_to(
+        router: &Router,
+        method: &str,
+        uri: &str,
+        host: &str,
+    ) -> Result<Response, Box<dyn Error>> {
         let request = Request::builder()
             .method(method)
             .uri(uri)
+            .header(header::HOST, host)
             .body(Body::empty())?;
         Ok(router.clone().oneshot(request).await?)
     }
@@ -245,6 +260,15 @@ mod tests {
                 "{method} {uri}"
             );
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rejects_unknown_hosts_with_headers() -> Result<(), Box<dyn Error>> {
+        let (router, id) = viewer().await?;
+        let response = send_to(&router, "GET", &format!("/r/{id}"), "evil.example.com").await?;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_security_headers(&response);
         Ok(())
     }
 }

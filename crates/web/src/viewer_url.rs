@@ -7,6 +7,8 @@ use std::fmt;
 
 use galley_core::domain::shared::RevisionId;
 
+use crate::host::hostname;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ViewerUrl {
     /// 指定した URL（`https://galley-docs.example.com` など。末尾の `/` は除く）。
@@ -31,11 +33,16 @@ impl ViewerUrl {
             .iter()
             .find_map(|scheme| lower.strip_prefix(scheme))
             .ok_or_else(error)?;
-        let (host, port) = split_host(authority).ok_or_else(error)?;
-        if !is_valid_host(host) || port.is_some_and(|p| p.parse::<u16>().is_err()) {
-            return Err(error());
-        }
+        hostname(authority).ok_or_else(error)?;
         Ok(Self::Fixed(lower))
+    }
+
+    /// 指定した URL のホスト名（`host[:port]`）。`SameHost` なら `None`。
+    pub fn fixed_authority(&self) -> Option<&str> {
+        match self {
+            Self::Fixed(base) => base.split_once("://").map(|(_, authority)| authority),
+            Self::SameHost { .. } => None,
+        }
     }
 
     /// 版の HTML の URL。`app_host` はアプリへのリクエストの Host ヘッダー（`SameHost` のときに使う）。
@@ -43,13 +50,7 @@ impl ViewerUrl {
     pub fn revision_url(&self, app_host: &str, id: RevisionId) -> Option<String> {
         let base = match self {
             Self::Fixed(base) => base.clone(),
-            Self::SameHost { port } => {
-                let (host, _) = split_host(app_host)?;
-                if !is_valid_host(host) {
-                    return None;
-                }
-                format!("http://{host}:{port}")
-            }
+            Self::SameHost { port } => format!("http://{}:{port}", hostname(app_host)?),
         };
         Some(format!("{base}/r/{id}"))
     }
@@ -62,36 +63,6 @@ impl fmt::Display for ViewerUrl {
             Self::SameHost { port } => write!(f, "http://<アプリと同じホスト名>:{port}"),
         }
     }
-}
-
-/// `host[:port]` / `[ipv6][:port]` をホスト名とポートに分ける。
-fn split_host(authority: &str) -> Option<(&str, Option<&str>)> {
-    if authority.starts_with('[') {
-        let end = authority.find(']')?;
-        let host = &authority[..=end];
-        return match &authority[end + 1..] {
-            "" => Some((host, None)),
-            rest => Some((host, Some(rest.strip_prefix(':')?))),
-        };
-    }
-    match authority.split_once(':') {
-        Some((host, port)) => Some((host, Some(port))),
-        None => Some((authority, None)),
-    }
-}
-
-/// ホスト名（英数字・ハイフン・ドット）または `[` `]` で囲んだ IPv6 アドレス。
-fn is_valid_host(host: &str) -> bool {
-    if let Some(ipv6) = host.strip_prefix('[').and_then(|h| h.strip_suffix(']')) {
-        return !ipv6.is_empty()
-            && ipv6
-                .chars()
-                .all(|c| c.is_ascii_hexdigit() || c == ':' || c == '.');
-    }
-    !host.is_empty()
-        && host
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
 }
 
 #[cfg(test)]
@@ -118,6 +89,10 @@ mod tests {
             url.revision_url("[::1]:8080", id),
             Some(format!("http://[::1]:8081/r/{id}"))
         );
+        assert_eq!(
+            url.revision_url("Galley.Internal:8080", id),
+            Some(format!("http://galley.internal:8081/r/{id}"))
+        );
     }
 
     #[test]
@@ -143,6 +118,14 @@ mod tests {
             Some(format!("https://galley-docs.example.com/r/{id}"))
         );
         assert!(ViewerUrl::parse("http://localhost:18081").is_ok());
+        assert_eq!(
+            ViewerUrl::parse("http://docs.internal:8081")
+                .ok()
+                .as_ref()
+                .and_then(ViewerUrl::fixed_authority),
+            Some("docs.internal:8081")
+        );
+        assert_eq!(ViewerUrl::SameHost { port: 1 }.fixed_authority(), None);
         assert!(ViewerUrl::parse("http://[::1]:8081").is_ok());
     }
 
