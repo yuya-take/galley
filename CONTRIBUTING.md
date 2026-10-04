@@ -23,7 +23,7 @@ cargo install topcoat-cli --locked
 
 ```bash
 cargo build
-topcoat asset bundle          # 実行ファイルの隣に assets/ を作る
+topcoat asset bundle          # 実行ファイルの隣に assets/ を作る（初回は書体をダウンロードする）
 cargo run -p galley-server
 ```
 
