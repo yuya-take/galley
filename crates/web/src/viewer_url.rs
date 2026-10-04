@@ -7,7 +7,7 @@ use std::fmt;
 
 use galley_core::domain::shared::RevisionId;
 
-use crate::host::hostname;
+use crate::host::{base_url, hostname};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ViewerUrl {
@@ -26,15 +26,9 @@ pub struct ViewerUrlError(String);
 impl ViewerUrl {
     /// `http(s)://<ホスト名>[:ポート]` を読む。パス・クエリ・ユーザー情報は受け付けない。
     pub fn parse(value: &str) -> Result<Self, ViewerUrlError> {
-        let error = || ViewerUrlError(value.to_owned());
-        let trimmed = value.trim().trim_end_matches('/');
-        let lower = trimmed.to_ascii_lowercase();
-        let authority = ["https://", "http://"]
-            .iter()
-            .find_map(|scheme| lower.strip_prefix(scheme))
-            .ok_or_else(error)?;
-        hostname(authority).ok_or_else(error)?;
-        Ok(Self::Fixed(lower))
+        base_url(value)
+            .map(Self::Fixed)
+            .ok_or_else(|| ViewerUrlError(value.to_owned()))
     }
 
     /// 指定した URL のホスト名（`host[:port]`）。`SameHost` なら `None`。

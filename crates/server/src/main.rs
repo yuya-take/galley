@@ -2,6 +2,7 @@
 //!
 //! 画面と MCP（:8080）、資料配信（:8081）を同じプロセスで立ち上げる。
 
+mod app;
 mod guard;
 mod mcp;
 mod viewer;
@@ -14,16 +15,11 @@ use std::{
 };
 
 use anyhow::Context as _;
-use axum::middleware;
 use galley_core::{
     adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
     app::revision::ReadRevisionContent,
 };
-use galley_web::ViewerUrl;
-
-use rmcp::transport::streamable_http_server::{
-    StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
-};
+use galley_web::{AppUrl, ViewerUrl};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
@@ -42,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
         PathBuf::from(std::env::var("GALLEY_DATA_DIR").unwrap_or_else(|_| DEFAULT_DATA_DIR.into()));
     std::fs::create_dir_all(&data_dir)?;
     let db_path = data_dir.join("galley.db");
-    // 画面と MCP にユースケースを渡すのは #12〜#18
+    // 画面にユースケースを渡すのは #13〜#18
     let database = SqliteDatabase::open(&db_path).await?;
     tracing::info!("database: {}", db_path.display());
     let blobs = Arc::new(open_blob_store(&data_dir)?);
@@ -55,22 +51,28 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("viewer url: {viewer_url}");
     let allowed_hosts = Arc::new(allowed_hosts_from_env(&viewer_url)?);
 
-    let web = galley_web::service()?;
-    let mcp = StreamableHttpService::new(
-        || Ok(mcp::GalleyMcp::new()),
-        LocalSessionManager::default().into(),
-        StreamableHttpServerConfig::default().with_allowed_hosts(allowed_hosts.for_rmcp()),
-    );
+    let app_url = app_url_from_env()?;
+    tracing::info!("app url: {app_url}");
 
-    // /mcp 以外はすべて Topcoat の画面に渡す。Host の検査を一番外に置く
-    let app = axum::Router::new()
-        .nest_service("/mcp", mcp)
-        .fallback_service(web)
-        .layer(middleware::from_fn(guard::check_csrf))
-        .layer(middleware::from_fn_with_state(
-            allowed_hosts.clone(),
-            guard::check_host,
-        ));
+    let web = galley_web::service()?;
+    let mcp_token = Arc::new(guard::McpToken::from_env(std::env::var("MCP_TOKEN").ok()));
+    if mcp_token.is_required() {
+        tracing::info!("MCP は Authorization: Bearer のトークンを求めます");
+    }
+    let app = app::app_router(
+        web,
+        app::mcp_app(
+            app::Ports {
+                projects: Arc::new(database.projects()),
+                documents: Arc::new(database.documents()),
+                revisions: Arc::new(database.revisions()),
+                blobs: blobs.clone(),
+            },
+            app_url,
+        ),
+        &allowed_hosts,
+        mcp_token,
+    );
     let viewer = viewer::router(
         Arc::new(ReadRevisionContent::new(
             Arc::new(database.revisions()),
@@ -88,6 +90,14 @@ async fn main() -> anyhow::Result<()> {
         axum::serve(viewer_listener, viewer).into_future(),
     )?;
     Ok(())
+}
+
+/// アプリの画面の URL（MCP が返す資料ビューアのリンク）。`GALLEY_APP_URL` が無ければリクエストの Host から作る。
+fn app_url_from_env() -> anyhow::Result<AppUrl> {
+    match std::env::var("GALLEY_APP_URL") {
+        Ok(url) if !url.is_empty() => Ok(AppUrl::parse(&url)?),
+        _ => Ok(AppUrl::FromRequest),
+    }
 }
 
 /// 受け付けるホスト名（DNS リバインディング対策）。`ALLOWED_HOSTS` が未設定なら localhost だけ。

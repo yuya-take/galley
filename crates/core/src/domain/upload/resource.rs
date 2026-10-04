@@ -124,7 +124,15 @@ impl ExternalResources {
 
         let mut request = String::new();
         if !items.is_empty() {
-            request.push_str(&items.join("、"));
+            let joined = items.join("、");
+            // 英字で終わるとき（ライブラリ名）は、続く「を」との間に空白を入れる
+            let space = if joined.ends_with(|c: char| c.is_ascii_alphanumeric()) {
+                " "
+            } else {
+                ""
+            };
+            request.push_str(&joined);
+            request.push_str(space);
             request.push_str(
                 "を外部から読み込まず、すべてを HTML の中に埋め込んだ、1ファイルで完結する HTML に作り直してください。",
             );
@@ -170,6 +178,18 @@ mod tests {
             resources.ai_request(),
             "chart.js、Web フォント、画像を外部から読み込まず、すべてを HTML の中に埋め込んだ、1ファイルで完結する HTML に作り直してください。"
         );
+    }
+
+    #[test]
+    fn ai_request_spaces_after_library_name() {
+        let resources = ExternalResources::new(
+            vec![resource(
+                ResourceKind::Script,
+                "https://cdn.jsdelivr.net/npm/chart.js@4",
+            )],
+            1,
+        );
+        assert!(resources.ai_request().starts_with("chart.js を外部から"));
     }
 
     #[test]

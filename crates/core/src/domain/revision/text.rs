@@ -5,11 +5,11 @@ pub const REVISION_MESSAGE_MAX_CHARS: usize = 500;
 
 text_value!(
     /// 更新者の名前。ログインがないので自己申告。
-    AuthorName, "更新者の名前", AUTHOR_NAME_MAX_CHARS, allow_empty = false
+    AuthorName, "更新者の名前", AUTHOR_NAME_MAX_CHARS, allow_empty = false, multiline = false
 );
 text_value!(
     /// 版の変更メモ。空でもよい。
-    RevisionMessage, "変更メモ", REVISION_MESSAGE_MAX_CHARS, allow_empty = true
+    RevisionMessage, "変更メモ", REVISION_MESSAGE_MAX_CHARS, allow_empty = true, multiline = true
 );
 
 impl RevisionMessage {
