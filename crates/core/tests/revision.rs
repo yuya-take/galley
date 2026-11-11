@@ -9,14 +9,15 @@ use galley_core::{
         error::AppError,
         project::{ArchiveProject, CreateProject, ProjectInput},
         revision::{
-            AddRevision, FindRevision, RegisteredRevision, RevertToRevision, RevisionInput,
+            AddRevision, FindRevision, ListRevisions, RegisteredRevision, RevertToRevision,
+            RevisionInput,
         },
     },
     domain::{
         blob::{BlobHash, BlobStore},
         document::{DocumentError, DocumentRepository},
         project::{Project, ProjectError},
-        revision::{RevisionNumber, RevisionRepository, RevisionSource},
+        revision::{Revision, RevisionNumber, RevisionRepository, RevisionSource},
         shared::DocumentId,
         upload::UploadError,
     },
@@ -385,6 +386,35 @@ async fn find_revision_defaults_to_latest() -> TestResult {
         find.execute(&added.document, Some(9)).await,
         Err(AppError::RevisionNotFound)
     ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_revisions_returns_newest_first() -> TestResult {
+    let fx = Fixture::new().await?;
+    let created = fx.create("plan.html", V1).await?;
+    let other = fx.create("memo.html", V1).await?;
+    fx.add(created.document.id, V2).await?;
+    fx.add(created.document.id, V1).await?;
+    let latest = fx.add(created.document.id, V2).await?;
+    let list = ListRevisions::new(Arc::new(fx.database.revisions()));
+
+    let numbers = |revisions: Vec<Revision>| {
+        revisions
+            .into_iter()
+            .map(|r| r.number.get())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        numbers(list.execute(&latest.document, None).await?),
+        [4, 3, 2, 1]
+    );
+    assert_eq!(
+        numbers(list.execute(&latest.document, Some(3)).await?),
+        [4, 3, 2]
+    );
+    // ほかの資料の版は混ざらない
+    assert_eq!(numbers(list.execute(&other.document, None).await?), [1]);
     Ok(())
 }
 

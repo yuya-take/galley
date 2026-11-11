@@ -14,7 +14,12 @@ pub use viewer_url::{ViewerUrl, ViewerUrlError};
 use std::sync::Arc;
 
 use galley_core::{
-    app::{error::AppError, project::ListProjects},
+    app::{
+        document::{FindDocument, ListDocuments},
+        error::AppError,
+        project::{FindProject, ListProjects},
+        revision::ListRevisions,
+    },
     domain::{project::ProjectSummary, shared::ArchiveFilter},
 };
 use topcoat::{
@@ -25,15 +30,25 @@ use topcoat::{
 };
 
 mod author;
+mod date;
 mod fonts;
 mod icon;
 mod layout;
+mod mcp_command;
 mod pages;
 mod sidebar;
 
 /// 画面から使うユースケース。起動時に1つ作り、Topcoat の app context で共有する。
 pub struct WebApp {
     pub list_projects: ListProjects,
+    pub find_project: FindProject,
+    pub list_documents: ListDocuments,
+    pub find_document: FindDocument,
+    pub list_revisions: ListRevisions,
+    /// プレビューの iframe に入れる資料配信の URL。
+    pub viewer_url: ViewerUrl,
+    /// 空のプロジェクトに出す MCP の登録コマンドの URL。
+    pub app_url: AppUrl,
 }
 
 impl WebApp {
@@ -51,7 +66,9 @@ pub fn service(app: Arc<WebApp>) -> std::io::Result<TowerService> {
     let mut builder = Router::builder()
         .app_context(app)
         .layout(layout::root_layout)
-        .page(pages::home)
+        .page(pages::documents::all_documents)
+        .page(pages::documents::project_documents)
+        .route(pages::documents::document_preview)
         .page(pages::not_found);
     for font in fonts::ALL {
         builder = builder.font(font);
