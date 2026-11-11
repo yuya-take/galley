@@ -1,0 +1,6 @@
+# ビルドに使うものだけを送る（target/、.claude/worktrees/、data/ などを送らない）
+*
+!Cargo.toml
+!Cargo.lock
+!rust-toolchain.toml
+!crates/
