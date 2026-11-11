@@ -29,6 +29,15 @@ cargo run -p galley-server
 
 アプリは http://localhost:8080 、資料配信は http://localhost:8081 で動きます。ポートが空いていないときは、環境変数 `GALLEY_APP_ADDR` / `GALLEY_VIEWER_ADDR` で変えてください（例：`GALLEY_APP_ADDR=127.0.0.1:18080`）。DB はカレントディレクトリの `data/galley.db`、資料の実体は `data/blobs/` にでき（`GALLEY_DATA_DIR` で変更可）、起動時にマイグレーションが自動で適用されます。`ALLOWED_HOSTS` を指定しなければ localhost からのアクセスだけを受け付けます（ほかの PC から開くときは `ALLOWED_HOSTS=192.168.1.10` のように指定）。
 
+### Docker イメージ
+
+```bash
+docker build -t galley .
+docker run --rm -p 8080:8080 -p 8081:8081 galley
+```
+
+ビルドのときに書体をダウンロードするので、ネットワークが要ります。環境変数は [README](README.md#環境変数) にまとめています。
+
 ## PR を出す前に
 
 CI と同じ検査を手元で実行してください。

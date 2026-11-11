@@ -12,9 +12,11 @@ use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
 use anyhow::Context as _;
+use axum::Router;
 use galley_core::{
     adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
     app::{
@@ -33,6 +35,9 @@ const DEFAULT_APP_ADDR: &str = "0.0.0.0:8080";
 const DEFAULT_VIEWER_ADDR: &str = "0.0.0.0:8081";
 /// DB と資料の実体を置くディレクトリ。Docker イメージでは `/data` を指定する。
 const DEFAULT_DATA_DIR: &str = "data";
+/// 止める合図のあと、処理中のリクエストを待つ時間。MCP の SSE のように閉じない接続があっても、
+/// `docker stop` が SIGKILL を送る（既定 10 秒）より前に終わるようにする。
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -105,11 +110,78 @@ async fn main() -> anyhow::Result<()> {
     let viewer_listener = TcpListener::bind(&viewer_addr).await?;
     tracing::info!("app: http://{app_addr}, viewer: http://{viewer_addr}");
 
-    tokio::try_join!(
-        axum::serve(app_listener, app).into_future(),
-        axum::serve(viewer_listener, viewer).into_future(),
-    )?;
+    serve(app_listener, app, viewer_listener, viewer).await
+}
+
+/// アプリと資料配信を動かす。止める合図が来たら新しい接続を受け付けずに処理中のリクエストを待ち、
+/// `SHUTDOWN_GRACE` を過ぎたら残りを打ち切って終わる。
+async fn serve(
+    app_listener: TcpListener,
+    app: Router,
+    viewer_listener: TcpListener,
+    viewer: Router,
+) -> anyhow::Result<()> {
+    let servers = async {
+        tokio::try_join!(
+            axum::serve(app_listener, app)
+                .with_graceful_shutdown(shutdown_signal())
+                .into_future(),
+            axum::serve(viewer_listener, viewer)
+                .with_graceful_shutdown(shutdown_signal())
+                .into_future(),
+        )
+    };
+    tokio::pin!(servers);
+    tokio::select! {
+        result = &mut servers => {
+            result?;
+        }
+        () = shutdown_signal() => {
+            tracing::info!(
+                "停止します（処理中のリクエストを最大 {} 秒待ちます）",
+                SHUTDOWN_GRACE.as_secs()
+            );
+            match tokio::time::timeout(SHUTDOWN_GRACE, &mut servers).await {
+                Ok(result) => {
+                    result?;
+                }
+                Err(_) => tracing::warn!("終わらなかった接続を打ち切ります"),
+            }
+        }
+    }
     Ok(())
+}
+
+/// 止める合図（SIGTERM か Ctrl+C）を待つ。
+///
+/// コンテナでは PID 1 で動くので、ハンドラーが無いと SIGTERM が無視され、`docker stop` は
+/// 待ったあとに SIGKILL で止めることになる。合図は待っているすべての `shutdown_signal` に届く。
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            tracing::error!("Ctrl+C を待てません: {error}");
+            std::future::pending::<()>().await;
+        }
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        use tokio::signal::unix::{SignalKind, signal};
+        match signal(SignalKind::terminate()) {
+            Ok(mut terminate) => {
+                terminate.recv().await;
+            }
+            Err(error) => {
+                tracing::error!("SIGTERM を待てません: {error}");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        () = ctrl_c => {}
+        () = terminate => {}
+    }
 }
 
 /// アプリの画面の URL（MCP が返す資料ビューアのリンク）。`GALLEY_APP_URL` が無ければリクエストの Host から作る。
