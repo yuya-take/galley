@@ -56,6 +56,11 @@ impl AppUrl {
         ))
     }
 
+    /// MCP の URL（`/mcp`）。空のプロジェクトの案内に出す登録コマンドに入れる。
+    pub fn mcp_url(&self, host: Option<&str>) -> Option<String> {
+        Some(format!("{}/mcp", self.base(host)?))
+    }
+
     fn base(&self, host: Option<&str>) -> Option<String> {
         match self {
             Self::Fixed(base) => Some(base.clone()),
@@ -97,6 +102,11 @@ mod tests {
             Some("http://localhost:8080/sales/plan/v/3")
         );
         assert_eq!(url.document_url(Some("evil/x"), "sales", "plan"), None);
+        assert_eq!(
+            url.mcp_url(Some("localhost:8080")).as_deref(),
+            Some("http://localhost:8080/mcp")
+        );
+        assert_eq!(url.mcp_url(Some("evil/x")), None);
     }
 
     #[test]
