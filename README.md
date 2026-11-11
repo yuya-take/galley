@@ -16,16 +16,98 @@ AI が生成した HTML 資料を、プロジェクト単位で保存・閲覧�
 
 資料は「外部リソースを読み込まない、1ファイルで完結した HTML」に限ります。CSS と JavaScript は HTML 内に書き、画像は data URI で埋め込んでください。
 
-## 使い方（予定）
+## 使い方
+
+Docker イメージ1つと、データ用のボリューム1つで動きます（linux/amd64・linux/arm64）。イメージはリリースのたびに ghcr.io に公開します。
 
 ```bash
-docker run -d -p 8080:8080 -p 8081:8081 -v galley-data:/data ghcr.io/yuya-take/galley
+docker run -d --name galley --restart unless-stopped \
+  -p 8080:8080 -p 8081:8081 \
+  -v galley-data:/data \
+  -e ALLOWED_HOSTS=galley.example.com \
+  -e TZ=Asia/Tokyo \
+  ghcr.io/yuya-take/galley
 ```
 
 - `:8080`：アプリ本体（画面と MCP の `/mcp`）
 - `:8081`：資料の配信（アプリと別オリジンにするため、ポートを分けています）
+- `ALLOWED_HOSTS` には、ブラウザや MCP クライアントからアクセスするときのホスト名を入れます。指定しないと localhost からのアクセスだけを受け付けます（同じ PC で試すだけなら要りません）
+- DB（SQLite）と資料の実体は `/data` に置きます
 
-インターネットには公開せず、社内ネットワークで使う前提です。環境変数などの詳しい使い方は、リリースに合わせて書きます。
+インターネットには公開せず、社内ネットワークで使う前提です。
+
+### 環境変数
+
+| 環境変数 | 既定 | 内容 |
+| --- | --- | --- |
+| `ALLOWED_HOSTS` | なし（localhost だけ） | 受け付けるホスト名（カンマ区切り。ポートは書かなくてよい）。例：`galley.example.com,192.168.1.10` |
+| `MCP_TOKEN` | なし | 設定すると、`/mcp` へのリクエストに `Authorization: Bearer <トークン>` を求めます |
+| `GALLEY_VIEWER_URL` | アプリと同じホスト名の `:8081` | 資料配信の URL（`https://galley-docs.example.com` など）。資料配信に別のホスト名を割り当てるとき、`-p 9081:8081` のように公開するポートを変えたとき、リバースプロキシを前に置いたときに指定します。ホスト名は `ALLOWED_HOSTS` に自動で加わります |
+| `GALLEY_APP_URL` | リクエストの Host から作る | アプリの URL（`https://galley.example.com` など）。MCP が返す資料のリンクに使います |
+| `TZ` | `UTC` | 画面に出す日時のタイムゾーン（例：`Asia/Tokyo`） |
+| `GALLEY_DATA_DIR` | `/data` | DB（`galley.db`）と資料の実体（`blobs/`）を置くディレクトリ |
+| `GALLEY_BLOB_STORE` | なし（`/data/blobs` に置く） | `s3://<バケット>/<プレフィックス>` を指定すると、資料の実体を S3 互換のストレージに置きます。認証情報などは `AWS_ACCESS_KEY_ID`・`AWS_SECRET_ACCESS_KEY`・`AWS_REGION`・`AWS_ENDPOINT`（MinIO などのとき）で渡します。`http://` のエンドポイントには `AWS_ALLOW_HTTP=true` も要ります |
+| `GALLEY_APP_ADDR` | `0.0.0.0:8080` | アプリの待ち受けアドレス |
+| `GALLEY_VIEWER_ADDR` | `0.0.0.0:8081` | 資料配信の待ち受けアドレス（アプリと別のポートにします） |
+| `RUST_LOG` | `info` | ログの詳しさ（`debug` など） |
+
+### データの置き場所
+
+名前付きボリューム（`-v galley-data:/data`）なら、そのまま使えます。ホストのディレクトリをマウントするとき（`-v /srv/galley:/data`）は、コンテナが uid 65532 で動くので、そのユーザーが書き込めるようにしておきます。
+
+```bash
+sudo chown 65532:65532 /srv/galley
+```
+
+### バックアップ
+
+`/data` を丸ごとコピーすれば、DB と資料の実体をまとめて残せます。SQLite は動いているあいだ `galley.db-wal` にも書き込むので、止めてからコピーしてください。
+
+```bash
+docker stop galley
+docker run --rm -v galley-data:/data -v "$PWD":/backup busybox \
+  tar czf /backup/galley-backup.tar.gz -C /data .
+docker start galley
+```
+
+戻すときは、新しいボリュームに展開してから、そのボリュームで起動します。
+
+```bash
+docker run --rm -v galley-data-restored:/data -v "$PWD":/backup busybox \
+  tar xzf /backup/galley-backup.tar.gz -C /data
+```
+
+止めずに続けて残したいときは、[Litestream](https://litestream.io/) で `galley.db` を S3 などに複製できます。同じボリュームをマウントしたコンテナを横に並べます（Docker Compose の例）。
+
+```yaml
+services:
+  galley:
+    image: ghcr.io/yuya-take/galley
+    restart: unless-stopped
+    ports: ["8080:8080", "8081:8081"]
+    environment:
+      ALLOWED_HOSTS: galley.example.com
+      TZ: Asia/Tokyo
+    volumes: ["galley-data:/data"]
+
+  litestream:
+    image: litestream/litestream
+    restart: unless-stopped
+    user: "65532:65532" # galley と同じユーザーで DB を開く
+    command: replicate /data/galley.db s3://my-bucket/galley.db
+    environment:
+      LITESTREAM_ACCESS_KEY_ID: ...
+      LITESTREAM_SECRET_ACCESS_KEY: ...
+    volumes: ["galley-data:/data"]
+    depends_on: [galley]
+
+volumes:
+  galley-data:
+```
+
+戻すときは、galley と litestream を止めてボリュームの `galley.db`・`galley.db-wal`・`galley.db-shm` を消してから、`docker compose run --rm litestream restore -o /data/galley.db s3://my-bucket/galley.db` で書き出します。
+
+Litestream が複製するのは DB だけです。資料の実体（`blobs/`）は、`GALLEY_BLOB_STORE` で S3 に置くか、別にコピーしてください。資料の実体は一度書いたら書き換えないので、動かしたままコピーしても壊れません。
 
 ### AI から登録する（MCP）
 
