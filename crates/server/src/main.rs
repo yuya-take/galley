@@ -18,11 +18,11 @@ use anyhow::Context as _;
 use galley_core::{
     adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
     app::{
-        document::{ListDocuments, RestoreDocument},
+        document::{FindDocument, ListDocuments, RestoreDocument},
         project::{
             ArchiveProject, CreateProject, FindProject, ListProjects, RestoreProject, UpdateProject,
         },
-        revision::ReadRevisionContent,
+        revision::{ListRevisions, ReadRevisionContent},
     },
 };
 use galley_web::{AppUrl, ViewerUrl};
@@ -44,7 +44,6 @@ async fn main() -> anyhow::Result<()> {
         PathBuf::from(std::env::var("GALLEY_DATA_DIR").unwrap_or_else(|_| DEFAULT_DATA_DIR.into()));
     std::fs::create_dir_all(&data_dir)?;
     let db_path = data_dir.join("galley.db");
-    // 画面にユースケースを渡すのは #13〜#18
     let database = SqliteDatabase::open(&db_path).await?;
     tracing::info!("database: {}", db_path.display());
     let blobs = Arc::new(open_blob_store(&data_dir)?);
@@ -52,7 +51,7 @@ async fn main() -> anyhow::Result<()> {
     let app_addr = std::env::var("GALLEY_APP_ADDR").unwrap_or_else(|_| DEFAULT_APP_ADDR.into());
     let viewer_addr =
         std::env::var("GALLEY_VIEWER_ADDR").unwrap_or_else(|_| DEFAULT_VIEWER_ADDR.into());
-    // 画面の iframe に入れる URL。画面に渡すのは #15
+    // 画面の iframe に入れる URL
     let viewer_url = viewer_url_from_env(&app_addr, &viewer_addr)?;
     tracing::info!("viewer url: {viewer_url}");
     let allowed_hosts = Arc::new(allowed_hosts_from_env(&viewer_url)?);
@@ -70,7 +69,11 @@ async fn main() -> anyhow::Result<()> {
         archive_project: ArchiveProject::new(projects.clone()),
         restore_project: RestoreProject::new(projects),
         list_documents: ListDocuments::new(documents.clone()),
+        find_document: FindDocument::new(documents.clone()),
         restore_document: RestoreDocument::new(documents),
+        list_revisions: ListRevisions::new(Arc::new(database.revisions())),
+        viewer_url,
+        app_url: app_url.clone(),
     }))?;
     let mcp_token = Arc::new(guard::McpToken::from_env(std::env::var("MCP_TOKEN").ok()));
     if mcp_token.is_required() {

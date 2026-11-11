@@ -38,7 +38,7 @@ pub async fn project_settings(cx: &Cx) -> Result<impl View> {
         Err(AppError::ProjectNotFound) => return Err(not_found().into()),
         Err(error) => return Err(error.into()),
     };
-    let host = project_form::app_host(request::headers(cx));
+    let host = project_form::app_host(cx, app);
     let is_saved = request::uri(cx).query() == Some(SAVED_QUERY);
 
     Ok(view! {
@@ -50,10 +50,10 @@ pub async fn project_settings(cx: &Cx) -> Result<impl View> {
                 </div>
             </header>
             if project.is_archived() {
-                <p class="notice">"このプロジェクトはアーカイブしています。一覧とサイドバーには出ません。"</p>
+                <p class="banner">"このプロジェクトはアーカイブしています。一覧とサイドバーには出ません。"</p>
             }
             if is_saved {
-                <p class="notice" role="status">"保存しました"</p>
+                <p class="banner" role="status">"保存しました"</p>
             }
             settings_form(project: &project, host: host.as_deref())
             ai_section(project: &project)

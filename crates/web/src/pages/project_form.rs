@@ -7,14 +7,15 @@ use galley_core::{
         shared::{ProjectId, SLUG_MAX_LEN, SlugError},
     },
 };
-use http::{HeaderMap, header};
 use topcoat::{
     Result,
+    context::Cx,
     runtime::{Event, Signal, record},
     view::{Unescaped, View, component, view},
 };
 
-use crate::{host, icon};
+use super::documents;
+use crate::{WebApp, icon};
 
 /// 画面から送るプロジェクトの入力（procedure の引数）。ブラウザから来る値なので、検査は core に任せる。
 #[record]
@@ -55,11 +56,9 @@ pub fn crest_label(color: CrestColor) -> &'static str {
     }
 }
 
-/// URL の欄の前に出す `<ホスト>/` のホスト（ポートを含む）。Host ヘッダーが正しくなければ `None`。
-pub fn app_host(headers: &HeaderMap) -> Option<String> {
-    let value = headers.get(header::HOST)?.to_str().ok()?;
-    host::hostname(value)?;
-    Some(value.trim().to_ascii_lowercase())
+/// URL の欄の前に出す `<ホスト>/` のホスト。`GALLEY_APP_URL` があればそのホスト、無ければリクエストの Host。
+pub fn app_host(cx: &Cx, app: &WebApp) -> Option<String> {
+    app.app_url.display_host(documents::host(cx))
 }
 
 /// ブラウザから来たプロジェクトの ID を読む。読めなければ「見つかりません」にする。
@@ -276,20 +275,5 @@ mod tests {
             "disk I/O error".to_owned(),
         )));
         assert!(!internal.contains("disk"), "{internal}");
-    }
-
-    #[test]
-    fn app_host_keeps_port_and_rejects_malformed_hosts() {
-        let headers = |host: &str| {
-            let mut headers = HeaderMap::new();
-            headers.insert(header::HOST, host.parse().unwrap_or_else(|e| panic!("{e}")));
-            headers
-        };
-        assert_eq!(
-            app_host(&headers("Galley.Internal:8080")).as_deref(),
-            Some("galley.internal:8080")
-        );
-        assert_eq!(app_host(&headers("evil/x")), None);
-        assert_eq!(app_host(&HeaderMap::new()), None);
     }
 }

@@ -12,7 +12,7 @@ use galley_core::{
         shared::{ArchiveFilter, DocumentId, ProjectId},
     },
 };
-use jiff::{Timestamp, tz::TimeZone};
+use jiff::{Timestamp, Zoned};
 use topcoat::{
     Result,
     context::{Cx, app_context},
@@ -22,7 +22,7 @@ use topcoat::{
 };
 
 use super::project_form::{self, form_error};
-use crate::{WebApp, author, icon};
+use crate::{WebApp, author, date, icon};
 
 #[page("/archive")]
 pub async fn archive(cx: &Cx) -> Result<impl View> {
@@ -41,7 +41,7 @@ pub async fn archive(cx: &Cx) -> Result<impl View> {
     let archived_project_ids: HashSet<ProjectId> =
         projects.iter().map(|summary| summary.project.id).collect();
 
-    let dates = DateFormat::now();
+    let now = date::now();
     Ok(view! {
         <header class="page-header">
             <div class="page-title">
@@ -49,18 +49,18 @@ pub async fn archive(cx: &Cx) -> Result<impl View> {
                 <p class="page-description">"アーカイブしたプロジェクトと資料です。資料と版の履歴はそのまま残っていて、元に戻すと一覧とサイドバーにまた出ます。"</p>
             </div>
         </header>
-        archived_projects(projects: &projects, dates: &dates)
+        archived_projects(projects: &projects, now: &now)
         archived_documents(
             documents: &documents,
             archived_project_ids: &archived_project_ids,
-            dates: &dates,
+            now: &now,
         )
     })
 }
 
 /// アーカイブしたプロジェクトの表。
 #[component]
-async fn archived_projects(projects: &[ProjectSummary], dates: &DateFormat) -> Result<impl View> {
+async fn archived_projects(projects: &[ProjectSummary], now: &Zoned) -> Result<impl View> {
     Ok(view! {
         <section class="archive-section" aria-labelledby="archived-projects">
             <h2 id="archived-projects">"プロジェクト" <span class="archive-count">(projects.len())</span></h2>
@@ -79,7 +79,7 @@ async fn archived_projects(projects: &[ProjectSummary], dates: &DateFormat) -> R
                     <tbody>
                         #[key(summary.project.id.to_string())]
                         for summary in projects {
-                            project_row(summary: summary, dates: dates)
+                            project_row(summary: summary, now: now)
                         }
                     </tbody>
                 </table>
@@ -93,7 +93,7 @@ async fn archived_projects(projects: &[ProjectSummary], dates: &DateFormat) -> R
 async fn archived_documents(
     documents: &[DocumentListItem],
     archived_project_ids: &HashSet<ProjectId>,
-    dates: &DateFormat,
+    now: &Zoned,
 ) -> Result<impl View> {
     Ok(view! {
         <section class="archive-section" aria-labelledby="archived-documents">
@@ -117,7 +117,7 @@ async fn archived_documents(
                             document_row(
                                 document: document,
                                 is_project_archived: archived_project_ids.contains(&document.project_id),
-                                dates: dates,
+                                now: now,
                             )
                         }
                     </tbody>
@@ -128,7 +128,7 @@ async fn archived_documents(
 }
 
 #[component]
-async fn project_row(summary: &ProjectSummary, dates: &DateFormat) -> Result<impl View> {
+async fn project_row(summary: &ProjectSummary, now: &Zoned) -> Result<impl View> {
     let project = &summary.project;
     let id = project.id.to_string();
     Ok(view! {
@@ -141,7 +141,7 @@ async fn project_row(summary: &ProjectSummary, dates: &DateFormat) -> Result<imp
                 <div class="archive-meta">(format!("/{}", project.slug))</div>
             </td>
             <td class="archive-number">(format!("{}件", summary.document_count))</td>
-            <td>archived_time(at: project.archived_at, dates: dates)</td>
+            <td>archived_time(at: project.archived_at, now: now)</td>
             <td class="archive-action">
                 restore_button(target: Restore::Project, id: &id, label: project.name.as_str())
             </td>
@@ -153,7 +153,7 @@ async fn project_row(summary: &ProjectSummary, dates: &DateFormat) -> Result<imp
 async fn document_row(
     document: &DocumentListItem,
     is_project_archived: bool,
-    dates: &DateFormat,
+    now: &Zoned,
 ) -> Result<impl View> {
     let id = document.id.to_string();
     Ok(view! {
@@ -179,7 +179,7 @@ async fn document_row(
                     (document.author_name.as_str())
                 </span>
             </td>
-            <td>archived_time(at: document.archived_at, dates: dates)</td>
+            <td>archived_time(at: document.archived_at, now: now)</td>
             <td class="archive-action">
                 restore_button(target: Restore::Document, id: &id, label: document.title.as_str())
             </td>
@@ -188,10 +188,10 @@ async fn document_row(
 }
 
 #[component]
-async fn archived_time(at: Option<Timestamp>, dates: &DateFormat) -> Result<impl View> {
+async fn archived_time(at: Option<Timestamp>, now: &Zoned) -> Result<impl View> {
     Ok(view! {
         if let Some(at) = at {
-            <time datetime=(at.to_string())>(dates.format(at))</time>
+            <time datetime=(date::machine(at)) title=(date::long(at, now.time_zone()))>(date::short(at, now))</time>
         }
     })
 }
@@ -286,38 +286,6 @@ async fn restore_document_by_id(app: &WebApp, id: &str) -> Result<(), String> {
         .map_err(project_form::error_message)
 }
 
-/// 日時の表示（「今日 14:10」「昨日 16:20」「9月19日」、年が違えば「2025年9月19日」）。
-/// 日付の境目はサーバーのタイムゾーンで決める。
-// #14 で共通の日時の表示（crates/web/src/date.rs）ができたら、そちらに寄せる
-struct DateFormat {
-    now: Timestamp,
-    tz: TimeZone,
-}
-
-impl DateFormat {
-    fn now() -> Self {
-        Self {
-            now: Timestamp::now(),
-            tz: TimeZone::system(),
-        }
-    }
-
-    fn format(&self, at: Timestamp) -> String {
-        let at = at.to_zoned(self.tz.clone());
-        let today = self.now.to_zoned(self.tz.clone()).date();
-        let date = at.date();
-        if date == today {
-            format!("今日 {:02}:{:02}", at.hour(), at.minute())
-        } else if today.yesterday().is_ok_and(|yesterday| yesterday == date) {
-            format!("昨日 {:02}:{:02}", at.hour(), at.minute())
-        } else if date.year() == today.year() {
-            format!("{}月{}日", date.month(), date.day())
-        } else {
-            format!("{}年{}月{}日", date.year(), date.month(), date.day())
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use galley_core::app::project::ProjectInput;
@@ -326,22 +294,6 @@ mod tests {
     use crate::pages::test_app;
 
     type TestResult = std::result::Result<(), String>;
-
-    fn at(value: &str) -> Timestamp {
-        value.parse().unwrap_or_else(|e| panic!("{value}: {e}"))
-    }
-
-    #[test]
-    fn dates_are_relative_to_today_in_server_time_zone() {
-        let dates = DateFormat {
-            now: at("2026-09-20T03:00:00Z"), // 日本時間 9月20日 12:00
-            tz: TimeZone::fixed(jiff::tz::offset(9)),
-        };
-        assert_eq!(dates.format(at("2026-09-19T15:10:00Z")), "今日 00:10");
-        assert_eq!(dates.format(at("2026-09-19T07:20:00Z")), "昨日 16:20");
-        assert_eq!(dates.format(at("2026-09-18T14:59:00Z")), "9月18日");
-        assert_eq!(dates.format(at("2025-09-19T03:00:00Z")), "2025年9月19日");
-    }
 
     #[tokio::test]
     async fn restore_project_brings_it_back() -> TestResult {

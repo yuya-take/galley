@@ -6,7 +6,7 @@ use galley_core::domain::project::CrestColor;
 use topcoat::{
     Result,
     context::{Cx, app_context},
-    router::{page, request},
+    router::page,
     runtime::{Event, procedure, signal},
     view::{View, view},
 };
@@ -18,7 +18,7 @@ use crate::WebApp;
 pub async fn new_project(cx: &Cx) -> Result<impl View> {
     let app: &Arc<WebApp> = app_context(cx);
     let initial_color = default_color(app.sidebar_projects().await?.len());
-    let host = project_form::app_host(request::headers(cx));
+    let host = project_form::app_host(cx, app);
 
     let name = signal(cx, String::new);
     let slug = signal(cx, String::new);

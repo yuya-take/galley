@@ -1,36 +1,15 @@
-//! 画面。資料の一覧（#14）、資料を読む（#15）などはそれぞれの Issue で作る。
+//! 画面。画面ごとにモジュールを分ける。資料を読む（#15）などはそれぞれの Issue で作る。
 
 pub mod archive;
+pub mod documents;
 pub mod new_project;
 mod project_form;
 pub mod project_settings;
 #[cfg(test)]
 mod test_app;
 
-use topcoat::{
-    Result,
-    router::{not_found, page},
-    view::{View, view},
-};
+use topcoat::router::not_found;
 
-// 見つからない URL はレイアウト付きの 404 にする。`/{*rest}` にすると `/{project}` で始まるルートと
-// 衝突する（Topcoat のルーターは同じ位置に catch-all と引数を置けない）ので、2階層目から受ける。
-// 1階層目（`/foo`）は `/{project}` の画面がプロジェクトを見つけられずに 404 を返す
+// `/{*rest}` は `/{project}` と同じ位置で衝突する（matchit は catch-all と引数を同時に登録できない）ので、
+// 2階層目から下を受ける。1階層の見知らぬ URL は `/{project}` がプロジェクトを見つけられずに 404 にする
 not_found!("/{project}");
-
-/// すべての資料。一覧は #14 で作る。
-#[page("/")]
-pub async fn home() -> Result<impl View> {
-    Ok(view! {
-        <header class="page-header">
-            <div class="page-title">
-                <div class="page-title-line"><h1>"すべての資料"</h1></div>
-                <p class="page-description">"すべてのプロジェクトの資料を、更新が新しい順に並べています"</p>
-            </div>
-            <button type="button" class="button button--primary" aria-disabled="true" title="登録は準備中です">"＋ HTMLを登録"</button>
-        </header>
-        <div class="panel">
-            <p class="page-description">"資料の一覧は準備中です。"</p>
-        </div>
-    })
-}

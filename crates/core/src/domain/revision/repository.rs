@@ -18,4 +18,11 @@ pub trait RevisionRepository: Send + Sync {
         document_id: DocumentId,
         number: RevisionNumber,
     ) -> Result<Option<Revision>, RepositoryError>;
+
+    /// 資料の版を新しい順に返す。`limit` を指定すれば、その件数まで（プレビュー欄の直近の版など）。
+    async fn list_by_document(
+        &self,
+        document_id: DocumentId,
+        limit: Option<u32>,
+    ) -> Result<Vec<Revision>, RepositoryError>;
 }

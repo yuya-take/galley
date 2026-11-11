@@ -15,11 +15,12 @@ use std::sync::Arc;
 
 use galley_core::{
     app::{
-        document::{ListDocuments, RestoreDocument},
+        document::{FindDocument, ListDocuments, RestoreDocument},
         error::AppError,
         project::{
             ArchiveProject, CreateProject, FindProject, ListProjects, RestoreProject, UpdateProject,
         },
+        revision::ListRevisions,
     },
     domain::{project::ProjectSummary, shared::ArchiveFilter},
 };
@@ -31,9 +32,11 @@ use topcoat::{
 };
 
 mod author;
+mod date;
 mod fonts;
 mod icon;
 mod layout;
+mod mcp_command;
 mod pages;
 mod sidebar;
 
@@ -46,7 +49,13 @@ pub struct WebApp {
     pub archive_project: ArchiveProject,
     pub restore_project: RestoreProject,
     pub list_documents: ListDocuments,
+    pub find_document: FindDocument,
     pub restore_document: RestoreDocument,
+    pub list_revisions: ListRevisions,
+    /// プレビューの iframe に入れる資料配信の URL。
+    pub viewer_url: ViewerUrl,
+    /// アプリの URL（空のプロジェクトに出す MCP の登録コマンド、URL の欄の前の「<ホスト>/」）。
+    pub app_url: AppUrl,
 }
 
 impl WebApp {
@@ -73,7 +82,9 @@ pub fn service(app: Arc<WebApp>) -> std::io::Result<TowerService> {
 fn routes(builder: RouterBuilder) -> RouterBuilder {
     builder
         .layout(layout::root_layout)
-        .page(pages::home)
+        .page(pages::documents::all_documents)
+        .page(pages::documents::project_documents)
+        .route(pages::documents::document_preview)
         .page(pages::not_found)
         .page(pages::new_project::new_project)
         .page(pages::project_settings::project_settings)
