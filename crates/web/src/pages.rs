@@ -1,6 +1,12 @@
 //! 画面。画面ごとにモジュールを分ける。資料を読む（#15）などはそれぞれの Issue で作る。
 
+pub mod archive;
 pub mod documents;
+pub mod new_project;
+mod project_form;
+pub mod project_settings;
+#[cfg(test)]
+mod test_app;
 
 use topcoat::router::not_found;
 

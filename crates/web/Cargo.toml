@@ -14,6 +14,10 @@ http.workspace = true
 jiff.workspace = true
 thiserror.workspace = true
 topcoat = { workspace = true, features = ["asset", "font", "font-fontsource", "router", "runtime", "serve", "tower", "view"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
 
 [lints]
 workspace = true

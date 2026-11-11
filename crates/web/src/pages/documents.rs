@@ -224,7 +224,7 @@ fn found<T>(result: Result<T, AppError>) -> Result<Option<T>, AppError> {
 }
 
 /// リクエストのホスト（Host ヘッダー。HTTP/2 なら `:authority`）。
-fn host(cx: &Cx) -> Option<&str> {
+pub(super) fn host(cx: &Cx) -> Option<&str> {
     request::headers(cx)
         .get(http::header::HOST)
         .and_then(|value| value.to_str().ok())

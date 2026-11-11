@@ -61,6 +61,16 @@ impl AppUrl {
         Some(format!("{}/mcp", self.base(host)?))
     }
 
+    /// 画面に出すアプリのホスト（`galley.example.com`、`localhost:8080`。スキームは除く）。
+    /// プロジェクトの URL の欄の前の「<ホスト>/」に使う。
+    pub fn display_host(&self, host: Option<&str>) -> Option<String> {
+        let base = self.base(host)?;
+        Some(
+            base.split_once("://")
+                .map_or_else(|| base.clone(), |(_, host)| host.to_owned()),
+        )
+    }
+
     fn base(&self, host: Option<&str>) -> Option<String> {
         match self {
             Self::Fixed(base) => Some(base.clone()),
@@ -107,6 +117,11 @@ mod tests {
             Some("http://localhost:8080/mcp")
         );
         assert_eq!(url.mcp_url(Some("evil/x")), None);
+        assert_eq!(
+            url.display_host(Some("Galley.Internal:8080")).as_deref(),
+            Some("galley.internal:8080")
+        );
+        assert_eq!(url.display_host(Some("evil/x")), None);
     }
 
     #[test]
@@ -117,6 +132,13 @@ mod tests {
                 .and_then(|u| u.document_url(Some("localhost:8080"), "sales", "plan"))
                 .as_deref(),
             Some("https://galley.example.com/sales/plan")
+        );
+        assert_eq!(
+            AppUrl::parse("https://galley.example.com")
+                .ok()
+                .and_then(|u| u.display_host(Some("localhost:8080")))
+                .as_deref(),
+            Some("galley.example.com")
         );
         assert!(AppUrl::parse("https://galley.example.com/app").is_err());
     }

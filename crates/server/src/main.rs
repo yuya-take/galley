@@ -18,8 +18,10 @@ use anyhow::Context as _;
 use galley_core::{
     adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
     app::{
-        document::{FindDocument, ListDocuments},
-        project::{FindProject, ListProjects},
+        document::{FindDocument, ListDocuments, RestoreDocument},
+        project::{
+            ArchiveProject, CreateProject, FindProject, ListProjects, RestoreProject, UpdateProject,
+        },
         revision::{ListRevisions, ReadRevisionContent},
     },
 };
@@ -57,11 +59,18 @@ async fn main() -> anyhow::Result<()> {
     let app_url = app_url_from_env()?;
     tracing::info!("app url: {app_url}");
 
+    let projects = Arc::new(database.projects());
+    let documents = Arc::new(database.documents());
     let web = galley_web::service(Arc::new(galley_web::WebApp {
-        list_projects: ListProjects::new(Arc::new(database.projects())),
-        find_project: FindProject::new(Arc::new(database.projects())),
-        list_documents: ListDocuments::new(Arc::new(database.documents())),
-        find_document: FindDocument::new(Arc::new(database.documents())),
+        list_projects: ListProjects::new(projects.clone()),
+        find_project: FindProject::new(projects.clone()),
+        create_project: CreateProject::new(projects.clone()),
+        update_project: UpdateProject::new(projects.clone()),
+        archive_project: ArchiveProject::new(projects.clone()),
+        restore_project: RestoreProject::new(projects),
+        list_documents: ListDocuments::new(documents.clone()),
+        find_document: FindDocument::new(documents.clone()),
+        restore_document: RestoreDocument::new(documents),
         list_revisions: ListRevisions::new(Arc::new(database.revisions())),
         viewer_url,
         app_url: app_url.clone(),

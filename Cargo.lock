@@ -1489,7 +1489,9 @@ dependencies = [
  "http",
  "jiff",
  "thiserror",
+ "tokio",
  "topcoat",
+ "tracing",
 ]
 
 [[package]]
