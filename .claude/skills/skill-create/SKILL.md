@@ -1,7 +1,8 @@
 ---
 name: skill-create
-description: gitの履歴を分析してコーディングパターンを抽出し、SKILL.mdファイルを生成する。
-argument-hint: [--commits N]
+description: git の履歴を分析してチームのコーディングパターン（コミット規約・同時に変更されるファイル群・定型ワークフロー）を抽出し、SKILL.md を生成する。
+argument-hint: "[--commits N]"
+disable-model-invocation: true
 ---
 
 # /skill-create - ローカルスキル生成
@@ -12,19 +13,17 @@ argument-hint: [--commits N]
 
 ### Step 1: Git データ収集
 
-引数 `$ARGUMENTS` から `--commits N` を取得（デフォルト: 200）。
-
-以下のコマンドでデータを収集する:
+引数 `$ARGUMENTS` から `--commits N` を取得する（デフォルト: 200）。以下の `N` はその値に置き換える。
 
 ```bash
 # コミット履歴と変更ファイル
-git log --oneline -n ${COMMITS:-200} --name-only --pretty=format:"%H|%s|%ad" --date=short
+git log -n N --name-only --pretty=format:"--- %h|%s|%ad" --date=short
 
 # ファイル別の変更頻度（よく変更されるファイル）
-git log --oneline -n 200 --name-only | grep -v "^$" | grep -v "^[a-f0-9]" | sort | uniq -c | sort -rn | head -20
+git log -n N --name-only --pretty=format: | grep -v '^$' | sort | uniq -c | sort -rn | head -20
 
 # コミットメッセージのパターン
-git log --oneline -n 200 | cut -d' ' -f2- | head -50
+git log -n N --pretty=format:%s | head -50
 ```
 
 ### Step 2: パターン検出
@@ -39,16 +38,20 @@ git log --oneline -n 200 | cut -d' ' -f2- | head -50
 | **アーキテクチャ** | ディレクトリ構造と命名規約 |
 | **テストパターン** | テストファイルの配置、命名、カバレッジ |
 
-### Step 3: SKILL.md 生成
+### Step 3: 内容の確認
 
-分析結果をもとに `.claude/skills/{スキル名}/SKILL.md` を生成する。
+検出したパターンと確信度（高/中/低）、生成するスキル名を提示し、ユーザーの確認を得る。確信度が低いパターンは含めるかどうかを聞く。
+
+### Step 4: SKILL.md 生成
+
+承認された内容で `.claude/skills/{スキル名}/SKILL.md` を生成する。`description` には「何のスキルか」に加えて「どんな作業のときに参照するか」（例: 新規 API エンドポイントを追加するとき）を書く。Claude はこの文面を見て、いつ読み込むかを判断するため。
 
 出力フォーマット:
 
 ```markdown
 ---
 name: {パターン名}
-description: {一行の説明}
+description: {何のスキルか}。{どんな作業のときに参照するか}
 user-invocable: false
 ---
 
@@ -67,7 +70,7 @@ user-invocable: false
 {検出されたテスト規約}
 ```
 
-### Step 4: 結果報告
+### Step 5: 結果報告
 
 生成したスキルの概要をユーザーに報告する:
 - 分析したコミット数
@@ -79,6 +82,6 @@ user-invocable: false
 
 - 既存の `.claude/rules/` や `CLAUDE.md` と重複する内容は生成しない
 - 推測ではなく、実際のgit履歴に基づいてパターンを抽出する
-- 生成前にユーザーに内容を確認してもらう
 - 既存のスキルと名前が衝突しないようにする
-- **ビルトインスラッシュコマンド（`/compact`, `/clear`, `/help`, `/init` など）を SKILL.md 本文に書いても Claude からは発火できない**。これらはハーネス機能で、Claude が呼べるツールとして提供されていないため。コンテキスト圧縮目的なら Agent ツール（`subagent_type=Explore` 等）への委譲で代替する。本文に書いていいのはユーザー定義スキル（`/dev-wt` などスキルディレクトリ配下にあるもの）のみ。
+- ビルトインのスラッシュコマンド（`/compact`, `/clear`, `/help` など）は SKILL.md 本文に書いても Claude からは発火できない（ハーネス機能でツールとして提供されていないため）。コンテキスト圧縮が目的なら Agent ツール（`subagent_type=Explore` 等）への委譲で代替する。本文から呼べるのはスキル（`/rv` など）のみ
+- 組み込みコマンド（`/init`, `/review`, `/code-review`, `/security-review` など）と同じ名前は付けない（どちらが呼ばれるか曖昧になるため）

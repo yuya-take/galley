@@ -84,13 +84,16 @@ disable-model-invocation: true
 ```bash
 gh issue create \
   --title "タイトル" \
+  --label "label1,label2" \
   --body "$(cat <<'EOF'
 Issue本文
 EOF
 )"
 ```
 
-作成後、Issue URLを報告する。
+ラベルは `gh label list` で存在するものの中から、内容に合うものを選んでドラフトに含めておく。
+
+作成後、Issue URL を報告し、実装は `/dev #<番号>` で始められることを伝える。
 
 ## 注意事項
 
