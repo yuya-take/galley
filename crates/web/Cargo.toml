@@ -10,8 +10,9 @@ publish.workspace = true
 
 [dependencies]
 galley-core.workspace = true
+http.workspace = true
 thiserror.workspace = true
-topcoat = { workspace = true, features = ["asset", "router", "runtime", "serve", "tower", "view"] }
+topcoat = { workspace = true, features = ["asset", "font", "font-fontsource", "router", "runtime", "serve", "tower", "view"] }
 
 [lints]
 workspace = true

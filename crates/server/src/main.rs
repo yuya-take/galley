@@ -17,7 +17,7 @@ use std::{
 use anyhow::Context as _;
 use galley_core::{
     adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
-    app::revision::ReadRevisionContent,
+    app::{project::ListProjects, revision::ReadRevisionContent},
 };
 use galley_web::{AppUrl, ViewerUrl};
 use tokio::net::TcpListener;
@@ -54,7 +54,9 @@ async fn main() -> anyhow::Result<()> {
     let app_url = app_url_from_env()?;
     tracing::info!("app url: {app_url}");
 
-    let web = galley_web::service()?;
+    let web = galley_web::service(Arc::new(galley_web::WebApp {
+        list_projects: ListProjects::new(Arc::new(database.projects())),
+    }))?;
     let mcp_token = Arc::new(guard::McpToken::from_env(std::env::var("MCP_TOKEN").ok()));
     if mcp_token.is_required() {
         tracing::info!("MCP は Authorization: Bearer のトークンを求めます");

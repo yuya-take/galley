@@ -14,7 +14,8 @@ paths:
 ## 外部リソース
 
 - 外部 CDN、Google Fonts などの外部フォント・スクリプト・画像を読み込まない。社内ネットワークで、インターネットに出られない環境でも動かすため
-- フォント・アイコン・スクリプトはリポジトリに同梱し、バイナリに埋め込んで自前で配信する
+- アイコン・スクリプト・CSS はリポジトリに同梱し（`crates/web/assets/`）、`asset!` で自前で配信する
+- 書体は Fontsource のものを `fontsource_font!(..., host: Asset)` で宣言する。`topcoat asset bundle` のときにダウンロードしてバンドルに入れ、実行時は自前で配信する（`crates/web/src/fonts.rs`）
 
 ## 資料の埋め込み
 
@@ -23,8 +24,8 @@ paths:
 
 ## 状態を変える操作
 
-- POST などは、独自ヘッダー付きの JSON で送る（サーバーの CSRF 対策の前提）
-- 更新者名はブラウザに保存した値を送る。未設定なら先に名前を聞く
+- POST などは JSON（`Content-Type: application/json`）で送る（サーバーの CSRF 対策の前提。`docs/design.md` の決定の記録）
+- 更新者名はブラウザの Cookie（`galley_author`）に保存した値を使う。保存は `assets/app.js`、サーバーは `author::from_headers` で読むだけ。未設定なら先に名前を聞く
 
 ## 見た目（中世の航海と写本）
 
