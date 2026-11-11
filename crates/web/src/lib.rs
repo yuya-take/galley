@@ -14,13 +14,19 @@ pub use viewer_url::{ViewerUrl, ViewerUrlError};
 use std::sync::Arc;
 
 use galley_core::{
-    app::{error::AppError, project::ListProjects},
+    app::{
+        document::{ListDocuments, RestoreDocument},
+        error::AppError,
+        project::{
+            ArchiveProject, CreateProject, FindProject, ListProjects, RestoreProject, UpdateProject,
+        },
+    },
     domain::{project::ProjectSummary, shared::ArchiveFilter},
 };
 use topcoat::{
     asset::{AssetBundle, RouterBuilderAssetExt},
     font::RouterBuilderFontExt,
-    router::{Router, tower::TowerService},
+    router::{Router, RouterBuilder, tower::TowerService},
     runtime::RouterBuilderRuntimeExt,
 };
 
@@ -34,6 +40,13 @@ mod sidebar;
 /// 画面から使うユースケース。起動時に1つ作り、Topcoat の app context で共有する。
 pub struct WebApp {
     pub list_projects: ListProjects,
+    pub find_project: FindProject,
+    pub create_project: CreateProject,
+    pub update_project: UpdateProject,
+    pub archive_project: ArchiveProject,
+    pub restore_project: RestoreProject,
+    pub list_documents: ListDocuments,
+    pub restore_document: RestoreDocument,
 }
 
 impl WebApp {
@@ -48,14 +61,37 @@ impl WebApp {
 /// アセット（runtime のスクリプト、CSS、書体など）は `topcoat asset bundle` で作ったバンドルを
 /// 実行ファイルの隣から読み込む。
 pub fn service(app: Arc<WebApp>) -> std::io::Result<TowerService> {
-    let mut builder = Router::builder()
-        .app_context(app)
-        .layout(layout::root_layout)
-        .page(pages::home)
-        .page(pages::not_found);
+    let mut builder = routes(Router::builder().app_context(app));
     for font in fonts::ALL {
         builder = builder.font(font);
     }
     let router = builder.assets(AssetBundle::load()?).runtime().build();
     Ok(TowerService::new(router))
+}
+
+/// レイアウト・画面・procedure を登録する。
+fn routes(builder: RouterBuilder) -> RouterBuilder {
+    builder
+        .layout(layout::root_layout)
+        .page(pages::home)
+        .page(pages::not_found)
+        .page(pages::new_project::new_project)
+        .page(pages::project_settings::project_settings)
+        .page(pages::archive::archive)
+        .route(pages::new_project::create_project)
+        .route(pages::project_settings::update_project)
+        .route(pages::project_settings::archive_project)
+        .route(pages::archive::restore_project)
+        .route(pages::archive::restore_document)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ルートが衝突すると起動時に panic するので、テストで先に見つける。
+    #[test]
+    fn routes_do_not_conflict() {
+        let _router = routes(Router::builder()).build();
+    }
 }

@@ -1,12 +1,22 @@
 //! 画面。資料の一覧（#14）、資料を読む（#15）などはそれぞれの Issue で作る。
 
+pub mod archive;
+pub mod new_project;
+mod project_form;
+pub mod project_settings;
+#[cfg(test)]
+mod test_app;
+
 use topcoat::{
     Result,
     router::{not_found, page},
     view::{View, view},
 };
 
-not_found!("/");
+// 見つからない URL はレイアウト付きの 404 にする。`/{*rest}` にすると `/{project}` で始まるルートと
+// 衝突する（Topcoat のルーターは同じ位置に catch-all と引数を置けない）ので、2階層目から受ける。
+// 1階層目（`/foo`）は `/{project}` の画面がプロジェクトを見つけられずに 404 を返す
+not_found!("/{project}");
 
 /// すべての資料。一覧は #14 で作る。
 #[page("/")]

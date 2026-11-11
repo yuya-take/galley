@@ -17,7 +17,13 @@ use std::{
 use anyhow::Context as _;
 use galley_core::{
     adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
-    app::{project::ListProjects, revision::ReadRevisionContent},
+    app::{
+        document::{ListDocuments, RestoreDocument},
+        project::{
+            ArchiveProject, CreateProject, FindProject, ListProjects, RestoreProject, UpdateProject,
+        },
+        revision::ReadRevisionContent,
+    },
 };
 use galley_web::{AppUrl, ViewerUrl};
 use tokio::net::TcpListener;
@@ -54,8 +60,17 @@ async fn main() -> anyhow::Result<()> {
     let app_url = app_url_from_env()?;
     tracing::info!("app url: {app_url}");
 
+    let projects = Arc::new(database.projects());
+    let documents = Arc::new(database.documents());
     let web = galley_web::service(Arc::new(galley_web::WebApp {
-        list_projects: ListProjects::new(Arc::new(database.projects())),
+        list_projects: ListProjects::new(projects.clone()),
+        find_project: FindProject::new(projects.clone()),
+        create_project: CreateProject::new(projects.clone()),
+        update_project: UpdateProject::new(projects.clone()),
+        archive_project: ArchiveProject::new(projects.clone()),
+        restore_project: RestoreProject::new(projects),
+        list_documents: ListDocuments::new(documents.clone()),
+        restore_document: RestoreDocument::new(documents),
     }))?;
     let mcp_token = Arc::new(guard::McpToken::from_env(std::env::var("MCP_TOKEN").ok()));
     if mcp_token.is_required() {
