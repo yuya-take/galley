@@ -248,8 +248,8 @@ impl From<UploadError> for ApiError {
                 ErrorCode::TooLarge,
                 format!(
                     "HTML が大きすぎます（{}。上限は {}）",
-                    format_size(size),
-                    format_size(max)
+                    format_size(size, Rounding::Up),
+                    format_size(max, Rounding::Down)
                 ),
             ),
             UploadError::NotUtf8 => Self::new(
@@ -307,8 +307,18 @@ impl From<AppError> for ApiError {
     }
 }
 
+/// 大きさを小数1桁にするときの丸め方。
+///
+/// 断った HTML の大きさは切り上げ、上限は切り捨てる。上限をわずかに超えただけでも
+/// 「10.1 MB。上限は 10 MB」のように、必ず上限より大きく見せるため（`assets/upload.js` と同じ）。
+#[derive(Debug, Clone, Copy)]
+enum Rounding {
+    Up,
+    Down,
+}
+
 /// 「512 KB」「10 MB」「12.5 MB」（1MB 未満は KB。1KB = 1024 バイト。`assets/upload.js` の表示と揃える）。
-fn format_size(bytes: usize) -> String {
+fn format_size(bytes: usize, rounding: Rounding) -> String {
     const KIBIBYTE: usize = 1024;
     const MEBIBYTE: usize = 1024 * 1024;
     let (unit, label) = if bytes < MEBIBYTE {
@@ -316,7 +326,10 @@ fn format_size(bytes: usize) -> String {
     } else {
         (MEBIBYTE, "MB")
     };
-    let tenths = (bytes * 10 + unit / 2) / unit;
+    let tenths = match rounding {
+        Rounding::Up => (bytes * 10).div_ceil(unit),
+        Rounding::Down => bytes * 10 / unit,
+    };
     if tenths.is_multiple_of(10) {
         format!("{} {label}", tenths / 10)
     } else {
@@ -344,7 +357,7 @@ pub async fn json_errors(cx: &Cx, body: Body, next: Next<'_>) -> Result<Response
                 ErrorCode::TooLarge,
                 format!(
                     "HTML が大きすぎて送れません（上限は {}）",
-                    format_size(app_context::<HtmlSizeLimit>(cx).bytes())
+                    format_size(app_context::<HtmlSizeLimit>(cx).bytes(), Rounding::Down)
                 ),
             )),
         ),
@@ -586,18 +599,43 @@ mod tests {
         assert_eq!(large.body.error.code, ErrorCode::TooLarge);
         assert_eq!(
             large.body.error.message,
-            "HTML が大きすぎます（10 MB。上限は 10 MB）"
+            "HTML が大きすぎます（10.1 MB。上限は 10 MB）"
         );
         Ok(())
     }
 
+    const KB: usize = 1024;
+    const MB: usize = 1024 * 1024;
+
     #[test]
     fn format_size_rounds_to_one_decimal() {
-        assert_eq!(format_size(10 * 1024 * 1024), "10 MB");
-        assert_eq!(format_size(1024 * 1024 + 512 * 1024), "1.5 MB");
-        assert_eq!(format_size(512 * 1024), "512 KB");
-        assert_eq!(format_size(1536), "1.5 KB");
-        assert_eq!(format_size(0), "0 KB");
+        for rounding in [Rounding::Up, Rounding::Down] {
+            assert_eq!(format_size(10 * MB, rounding), "10 MB");
+            assert_eq!(format_size(MB + 512 * KB, rounding), "1.5 MB");
+            assert_eq!(format_size(512 * KB, rounding), "512 KB");
+            assert_eq!(format_size(1536, rounding), "1.5 KB");
+            assert_eq!(format_size(0, rounding), "0 KB");
+        }
+        // 10.04MB、1025 バイト
+        assert_eq!(format_size(10 * MB + 41_943, Rounding::Up), "10.1 MB");
+        assert_eq!(format_size(10 * MB + 41_943, Rounding::Down), "10 MB");
+        assert_eq!(format_size(KB + 1, Rounding::Up), "1.1 KB");
+        assert_eq!(format_size(KB + 1, Rounding::Down), "1 KB");
+        // 1MB の手前は KB のまま
+        assert_eq!(format_size(MB - 1, Rounding::Up), "1024 KB");
+        assert_eq!(format_size(MB - 1, Rounding::Down), "1023.9 KB");
+    }
+
+    /// 上限を1バイトでも超えれば、表示も上限より大きくなる（小数1桁で割り切れない上限も含めて）。
+    #[test]
+    fn size_over_limit_never_looks_equal_to_limit() {
+        for limit in [KB, 512 * KB, MB, 1588 * KB, 10 * MB, 100 * MB] {
+            let over = format_size(limit + 1, Rounding::Up);
+            assert_ne!(over, format_size(limit, Rounding::Down), "{limit}");
+        }
+        // 1588KB は約 1.551MB。四捨五入では上限も 1.6 MB になり、超えた分と見分けがつかない
+        assert_eq!(format_size(1588 * KB, Rounding::Down), "1.5 MB");
+        assert_eq!(format_size(1588 * KB + 1, Rounding::Up), "1.6 MB");
     }
 
     #[tokio::test]

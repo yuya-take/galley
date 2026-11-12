@@ -124,7 +124,7 @@ mod tests {
         assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
         assert_eq!(
             body["error"]["message"],
-            "HTML が大きすぎます（512 KB。上限は 512 KB）"
+            "HTML が大きすぎます（512.1 KB。上限は 512 KB）"
         );
 
         let (status, body) = post_json(
