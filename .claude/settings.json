@@ -1,7 +1,8 @@
 {
   "attribution": {
     "commit": "",
-    "sessionUrl": false
+    "sessionUrl": false,
+    "pr": ""
   },
   "permissions": {
     "allow": [
@@ -33,7 +34,28 @@
       "Bash(ls:*)",
       "Bash(wc:*)",
       "WebSearch",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(make lint:*)",
+      "Bash(make test:*)",
+      "Bash(git show:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge-base:*)",
+      "Bash(gh issue list:*)",
+      "Bash(git switch:*)",
+      "Bash(git rev-list:*)",
+      "Bash(git worktree list:*)",
+      "Bash(git worktree add:*)"
+    ],
+    "ask": [
+      "Bash(git checkout -- *)",
+      "Bash(git checkout .)",
+      "Bash(git restore *)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)"
     ]
   },
   "hooks": {

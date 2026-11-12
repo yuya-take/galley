@@ -1,7 +1,6 @@
 ---
 name: pr
-description: 変更をコミットに分割してプッシュし、Pull Request を作成または更新する。
-disable-model-invocation: true
+description: 変更をコミットに分割してプッシュし、Pull Request を作成または更新する。ユーザーが PR の作成・更新を求めたとき、または他のスキルの手順で指示されたときに使う。
 argument-hint: "[--base <branch>] [--draft]"
 ---
 
@@ -24,6 +23,8 @@ argument-hint: "[--base <branch>] [--draft]"
 ## 3. コミット
 
 論理的な単位で分割する（機能追加・リファクタ・バグ修正・設定変更は別コミット）。メッセージは `.claude/rules/git-workflow.md` の形式（`<type>(<scope>): <説明>`）に従う。既にコミット済みのものは作り直さない。
+
+コミットメッセージにも PR の本文にも、Claude のセッションの URL（`Claude-Session:` の行、`https://claude.ai/code/session_…` へのリンク）は入れない。リポジトリの読者には開けないリンクで、公開リポジトリに残す必要が無いため。
 
 ## 4. プッシュ
 
