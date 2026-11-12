@@ -7,7 +7,7 @@ use galley_core::{
     app::{
         document::{ArchiveDocument, CreateDocument, CreateDocumentInput, SlugSource},
         error::AppError,
-        project::{ArchiveProject, CreateProject, ProjectInput},
+        project::{ArchiveProject, CreateProject, ProjectInput, RestoreProject},
         revision::{
             AddRevision, FindRevision, ListRevisions, RegisteredRevision, RevertToRevision,
             RevisionInput,
@@ -299,6 +299,30 @@ async fn add_revision_rejects_archived_or_missing_document() -> TestResult {
     Ok(())
 }
 
+#[tokio::test]
+async fn add_revision_rejects_document_in_archived_project() -> TestResult {
+    let fx = Fixture::new().await?;
+    let created = fx.create("plan.html", V1).await?;
+    // 資料はアーカイブせず、プロジェクトだけアーカイブする
+    ArchiveProject::new(Arc::new(fx.database.projects()))
+        .execute(fx.project.id)
+        .await?;
+    assert!(matches!(
+        fx.add(created.document.id, V2).await,
+        Err(AppError::Project(ProjectError::Archived))
+    ));
+    // 断ったときは実体も書かない
+    assert_eq!(fx.blobs.get(&BlobHash::of(V2.as_bytes())).await?, None);
+
+    // プロジェクトを戻せば追加できる
+    RestoreProject::new(Arc::new(fx.database.projects()))
+        .execute(fx.project.id)
+        .await?;
+    let added = fx.add(created.document.id, V2).await?;
+    assert_eq!(added.revision.number.get(), 2);
+    Ok(())
+}
+
 // ---- 過去の版に戻す ----
 
 #[tokio::test]
@@ -367,6 +391,30 @@ async fn revert_rejects_archived_document() -> TestResult {
             .await,
         Err(AppError::Document(DocumentError::Archived))
     ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn revert_rejects_document_in_archived_project() -> TestResult {
+    let fx = Fixture::new().await?;
+    let created = fx.create("plan.html", V1).await?;
+    fx.add(created.document.id, V2).await?;
+    ArchiveProject::new(Arc::new(fx.database.projects()))
+        .execute(fx.project.id)
+        .await?;
+    assert!(matches!(
+        fx.revert()
+            .execute(created.document.id, 1, "鈴木", RevisionSource::Web)
+            .await,
+        Err(AppError::Project(ProjectError::Archived))
+    ));
+    // 版は増えていない
+    let third = fx
+        .database
+        .revisions()
+        .find_by_number(created.document.id, RevisionNumber::new(3)?)
+        .await?;
+    assert_eq!(third, None);
     Ok(())
 }
 

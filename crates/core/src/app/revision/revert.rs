@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use jiff::Timestamp;
 
-use super::{RegisteredRevision, load_current, should_retry};
+use super::{RegisteredRevision, check_accepts_revisions, load_current, should_retry};
 use crate::{
     app::{document::load, error::AppError},
     domain::{
@@ -39,6 +39,8 @@ impl RevertToRevision {
     ) -> Result<RegisteredRevision, AppError> {
         let author_name = AuthorName::parse(author_name)?;
         let number = RevisionNumber::new(number).map_err(|_| AppError::RevisionNotFound)?;
+        // 資料が無い・資料かプロジェクトがアーカイブ済みなら断る
+        check_accepts_revisions(self.documents.as_ref(), document_id).await?;
         let now = Timestamp::now();
 
         let mut attempt = 1;

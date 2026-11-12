@@ -16,11 +16,12 @@ use jiff::Timestamp;
 
 use crate::domain::{
     blob::{Blob, BlobContent, BlobStore},
-    document::Document,
+    document::{Document, DocumentRepository},
     error::RepositoryError,
     revision::{
         AuthorName, NewRevision, Revision, RevisionMessage, RevisionRepository, RevisionSource,
     },
+    shared::DocumentId,
     upload::HtmlDocument,
 };
 
@@ -90,6 +91,24 @@ impl PreparedRevision {
             source: self.source,
         }
     }
+}
+
+/// 資料に版を追加できるかを確かめる。資料が無い、資料が属するプロジェクトがアーカイブ済み、
+/// 資料がアーカイブ済みのどれかなら断る。
+///
+/// 書き込みのトランザクションの外で確かめるので、確かめてから保存するまでの間にアーカイブされた分は通る
+/// （資料のアーカイブは、保存の直前に `Document::add_revision` でも確かめる）。
+pub(super) async fn check_accepts_revisions(
+    documents: &dyn DocumentRepository,
+    id: DocumentId,
+) -> Result<(), AppError> {
+    let (document, project) = documents
+        .find_with_project(id)
+        .await?
+        .ok_or(AppError::DocumentNotFound)?;
+    project.ensure_accepts_documents()?;
+    document.ensure_accepts_revisions()?;
+    Ok(())
 }
 
 /// 資料の現在版を読む。

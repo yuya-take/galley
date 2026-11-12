@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use jiff::Timestamp;
 
-use super::{PreparedRevision, RegisteredRevision, RevisionInput, load_current, should_retry};
+use super::{
+    PreparedRevision, RegisteredRevision, RevisionInput, check_accepts_revisions, load_current,
+    should_retry,
+};
 use crate::{
     app::{document::load, error::AppError},
     domain::{
@@ -37,9 +40,8 @@ impl AddRevision {
         document_id: DocumentId,
         input: RevisionInput,
     ) -> Result<RegisteredRevision, AppError> {
-        // 資料が無い・アーカイブ済みなら、HTML の検査とストレージへの書き込みの前に断る
-        let document = load(self.documents.as_ref(), document_id).await?;
-        document.ensure_accepts_revisions()?;
+        // 資料が無い・資料かプロジェクトがアーカイブ済みなら、HTML の検査とストレージへの書き込みの前に断る
+        check_accepts_revisions(self.documents.as_ref(), document_id).await?;
         let prepared = PreparedRevision::parse(input)?;
         let now = Timestamp::now();
         let blob = prepared.store(self.blobs.as_ref(), now).await?;

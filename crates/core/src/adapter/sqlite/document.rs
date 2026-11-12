@@ -9,7 +9,7 @@ use crate::domain::{
         DocumentTitle,
     },
     error::RepositoryError,
-    project::{CrestColor, ProjectName, ProjectSlug},
+    project::{CrestColor, Project, ProjectName, ProjectSlug},
     revision::{AuthorName, Revision, RevisionMessage, RevisionNumber},
     shared::{ArchiveFilter, DocumentId, ProjectId},
 };
@@ -17,7 +17,7 @@ use crate::domain::{
 use super::{
     WriteLock, backend_error,
     convert::corrupted,
-    model::{BlobRecord, DocumentRecord, RevisionRecord},
+    model::{BlobRecord, DocumentRecord, ProjectRecord, RevisionRecord},
     raw::{int, string, timestamp, timestamp_param, uuid, uuid_param},
 };
 
@@ -162,6 +162,30 @@ impl DocumentRepository for ToastyDocumentRepository {
             .map_err(backend_error)?
             .map(Document::try_from)
             .transpose()
+    }
+
+    /// 資料とプロジェクトを主キーで1件ずつ読む。モデルに関連を定義していないので、
+    /// 結合した SQL で全列を読み直すより、変換（`convert.rs`）を使い回せる2回の読み出しにしている。
+    async fn find_with_project(
+        &self,
+        id: DocumentId,
+    ) -> Result<Option<(Document, Project)>, RepositoryError> {
+        let Some(document) = self.find_by_id(id).await? else {
+            return Ok(None);
+        };
+        let mut db = self.db.clone();
+        let project = ProjectRecord::filter_by_id(document.project_id.as_uuid())
+            .first()
+            .exec(&mut db)
+            .await
+            .map_err(backend_error)?
+            .ok_or_else(|| {
+                corrupted(
+                    "documents.project_id",
+                    format!("資料 {} のプロジェクトがありません", document.id),
+                )
+            })?;
+        Ok(Some((document, Project::try_from(project)?)))
     }
 
     async fn find_by_slug(
