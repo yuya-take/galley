@@ -4,15 +4,14 @@
 //! 画面と MCP の両方がこの検査を通す。検査は利便性のためで、最終的な防御は表示側の CSP が担う。
 
 mod css;
+mod limit;
 mod resource;
 mod scan;
 mod script;
 mod url;
 
+pub use limit::{HtmlSizeLimit, HtmlSizeLimitError};
 pub use resource::{ExternalResource, ExternalResources, REJECTION_REASON, ResourceKind};
-
-/// 1ファイルのサイズ上限（バイト）。値は #21 で見直す。
-pub const MAX_HTML_BYTES: usize = 10 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum UploadError {
@@ -36,12 +35,12 @@ pub struct HtmlDocument {
 impl HtmlDocument {
     /// サイズ・文字コード・外部リソースの読み込みを検査する。
     ///
-    /// 上限いっぱいの 10MB で 0.1 秒ほど CPU を使うので、非同期の処理からはブロックする処理として呼ぶ。
-    pub fn parse(bytes: Vec<u8>) -> Result<Self, UploadError> {
-        if bytes.len() > MAX_HTML_BYTES {
+    /// 10MB で 0.1 秒ほど CPU を使うので、非同期の処理からはブロックする処理として呼ぶ。
+    pub fn parse(bytes: Vec<u8>, limit: HtmlSizeLimit) -> Result<Self, UploadError> {
+        if bytes.len() > limit.bytes() {
             return Err(UploadError::TooLarge {
                 size: bytes.len(),
-                max: MAX_HTML_BYTES,
+                max: limit.bytes(),
             });
         }
         let html = String::from_utf8(bytes).map_err(|_| UploadError::NotUtf8)?;
