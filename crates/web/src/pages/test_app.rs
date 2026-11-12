@@ -34,10 +34,9 @@ impl Deref for TestApp {
 }
 
 impl TestApp {
-    /// 資料を1つ登録して、すぐアーカイブする。
-    pub async fn archived_document(&self, project_id: ProjectId, title: &str) -> Document {
-        let registered = self
-            .create_document
+    /// 資料を1つ登録する。
+    pub async fn document(&self, project_id: ProjectId, title: &str) -> Document {
+        self.create_document
             .execute(CreateDocumentInput {
                 project_id,
                 title: Some(title.to_owned()),
@@ -50,9 +49,15 @@ impl TestApp {
                 },
             })
             .await
-            .unwrap_or_else(|e| panic!("{e}"));
+            .unwrap_or_else(|e| panic!("{e}"))
+            .document
+    }
+
+    /// 資料を1つ登録して、すぐアーカイブする。
+    pub async fn archived_document(&self, project_id: ProjectId, title: &str) -> Document {
+        let document = self.document(project_id, title).await;
         self.archive_document
-            .execute(registered.document.id)
+            .execute(document.id)
             .await
             .unwrap_or_else(|e| panic!("{e}"))
     }

@@ -6,7 +6,7 @@ pub mod new_project;
 mod project_form;
 pub mod project_settings;
 #[cfg(test)]
-mod test_app;
+pub(crate) mod test_app;
 
 use topcoat::router::not_found;
 
