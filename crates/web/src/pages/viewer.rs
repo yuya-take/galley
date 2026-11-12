@@ -27,6 +27,7 @@ use topcoat::{
 };
 
 use super::{
+    archive::{archive_confirm, archive_menu_item},
     documents::{found, host},
     project_form::{self, form_error},
 };
@@ -249,6 +250,10 @@ async fn viewer_screen<'a>(
     let project = &viewer.project;
     let project_path = viewer.project_path();
     let now = date::now();
+    // 「アーカイブ」の確認を出しているか（出しているときは `<プロジェクト>/<資料>`）
+    let confirming = signal(cx, String::new);
+    let (project_slug, document_slug) =
+        (project.slug.to_string(), viewer.document.slug.to_string());
 
     Ok(view! {
         <div
@@ -301,8 +306,25 @@ async fn viewer_screen<'a>(
                         data-upload-project=(project.slug.as_str())
                         data-upload-document=(viewer.document.slug.as_str())
                     >"新しい版を登録"</button>
+                    // そのほかの操作。esc と外を押したときに閉じるのは、ほかのメニューと同じ `assets/app.js`
+                    <details class="menu">
+                        <summary class="button button--outline button--icon" aria-label="そのほかの操作" title="そのほかの操作">
+                            (Unescaped::new_unchecked(icon::MORE_SVG))
+                        </summary>
+                        <div class="menu-list">
+                            <a class="menu-item" href=(format!("{}/history", viewer.document_path()))>"版の履歴"</a>
+                            archive_menu_item(key: format!("{project_slug}/{document_slug}"), confirming: &confirming)
+                        </div>
+                    </details>
                 </div>
             </header>
+            archive_confirm(
+                class: "viewer-banner",
+                project: project_slug,
+                document: document_slug,
+                title: title,
+                confirming: &confirming,
+            )
             if !viewer.is_latest() {
                 past_banner(viewer: viewer, has_author: has_author, now: &now)
             }
@@ -370,7 +392,7 @@ async fn revision_menu<'a>(viewer: &'a Viewer, now: &'a Zoned) -> Result<impl Vi
                                 </span>
                                 if is_shown {
                                     <span class="revision-check">
-                                        (Unescaped::new_unchecked(CHECK_SVG))
+                                        (Unescaped::new_unchecked(icon::CHECK_SVG))
                                         <span class="visually-hidden">"表示中"</span>
                                     </span>
                                 }
@@ -484,12 +506,12 @@ pub(super) fn revert_note(latest: RevisionNumber) -> String {
     )
 }
 
-/// 登録した直後の通知。「閉じる」と、URL から `?registered=` を消す処理は `assets/app.js`。
+/// 登録した直後の通知。「閉じる」と、URL から `?registered=` を消す処理は `assets/app.js`（`data-notice`）。
 #[component]
 async fn registered_toast(message: String, path: String) -> Result<impl View> {
     Ok(view! {
-        <div class="viewer-toast" role="status" data-registered-notice="">
-            <span class="viewer-toast-icon">(Unescaped::new_unchecked(CHECK_SVG))</span>
+        <div class="toast" role="status" data-notice="registered">
+            <span class="toast-icon">(Unescaped::new_unchecked(icon::CHECK_SVG))</span>
             <p>(message)</p>
             <button type="button" class="button button--outline button--small" data-copy-link=(path)>
                 <span data-copy-label="">"リンクをコピー"</span>
@@ -555,7 +577,6 @@ const BACK_SVG: &str = r#"<svg width="16" height="16" viewBox="0 0 24 24" fill="
 const EXTERNAL_SVG: &str = r#"<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>"#;
 const DOWNLOAD_SVG: &str = r#"<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg>"#;
 const CHEVRON_SVG: &str = r#"<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>"#;
-const CHECK_SVG: &str = r#"<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>"#;
 
 #[cfg(test)]
 mod tests {

@@ -18,10 +18,11 @@ use galley_core::{
     domain::{
         blob::{Blob, BlobHash},
         document::{
-            Document, DocumentOrder, DocumentQuery, DocumentRepository, DocumentSlug, DocumentTitle,
+            Document, DocumentError, DocumentOrder, DocumentQuery, DocumentRepository,
+            DocumentSlug, DocumentTitle,
         },
         error::RepositoryError,
-        project::Project,
+        project::{Project, ProjectError},
         revision::{AuthorName, NewRevision, RevisionMessage, RevisionNumber, RevisionSource},
         shared::{ArchiveFilter, DocumentId, ProjectId},
     },
@@ -440,6 +441,57 @@ async fn find_with_project_returns_owning_project() -> TestResult {
             .await?,
         None
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn archive_document_rejects_archived_missing_and_archived_project() -> TestResult {
+    let fixture = Fixture::new().await?;
+    let sales = fixture.create_project("sales", "営業部").await?;
+    let plan = fixture
+        .create_document(&sales, "plan", "事業計画", "佐藤", at(0)?)
+        .await?;
+    let memo = fixture
+        .create_document(&sales, "memo", "メモ", "佐藤", at(1)?)
+        .await?;
+    let archive = ArchiveDocument::new(fixture.documents.clone());
+
+    let archived = archive.execute(plan.id).await?;
+    assert!(archived.is_archived());
+    assert_eq!(fixture.titles(DocumentQuery::default()).await?, ["メモ"]);
+
+    // アーカイブ済み：アーカイブした日時は変えない
+    assert!(matches!(
+        archive.execute(plan.id).await,
+        Err(AppError::Document(DocumentError::AlreadyArchived))
+    ));
+    let (stored, _) = fixture
+        .documents
+        .find_with_project(plan.id)
+        .await?
+        .ok_or("資料がない")?;
+    assert_eq!(stored.archived_at, archived.archived_at);
+
+    // 無い資料
+    assert!(matches!(
+        archive.execute(DocumentId::generate()).await,
+        Err(AppError::DocumentNotFound)
+    ));
+
+    // アーカイブしたプロジェクトの資料：資料はアーカイブしない
+    ArchiveProject::new(Arc::new(fixture.database.projects()))
+        .execute(sales.id)
+        .await?;
+    assert!(matches!(
+        archive.execute(memo.id).await,
+        Err(AppError::Project(ProjectError::ArchivedWithDocuments))
+    ));
+    let (stored, _) = fixture
+        .documents
+        .find_with_project(memo.id)
+        .await?
+        .ok_or("資料がない")?;
+    assert!(!stored.is_archived());
     Ok(())
 }
 

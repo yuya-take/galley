@@ -16,7 +16,8 @@ use std::sync::Arc;
 use galley_core::{
     app::{
         document::{
-            CreateDocument, FindDocument, FindDocumentByFileName, ListDocuments, RestoreDocument,
+            ArchiveDocument, CreateDocument, FindDocument, FindDocumentByFileName, ListDocuments,
+            RestoreDocument,
         },
         error::AppError,
         project::{
@@ -54,6 +55,8 @@ pub struct WebApp {
     pub restore_project: RestoreProject,
     pub list_documents: ListDocuments,
     pub find_document: FindDocument,
+    /// 一覧のプレビュー欄と資料ビューアの「アーカイブ」。
+    pub archive_document: ArchiveDocument,
     pub restore_document: RestoreDocument,
     pub list_revisions: ListRevisions,
     /// 資料ビューアの「この版に戻す」。
@@ -115,6 +118,7 @@ fn routes(builder: RouterBuilder, html_size_limit: HtmlSizeLimit) -> RouterBuild
         .route(pages::project_settings::archive_project)
         .route(pages::archive::restore_project)
         .route(pages::archive::restore_document)
+        .route(pages::archive::archive_document)
         .route(pages::viewer::revert_to_revision)
         .route(search::document_search)
 }

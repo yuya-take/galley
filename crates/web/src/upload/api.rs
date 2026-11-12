@@ -278,8 +278,9 @@ impl From<AppError> for ApiError {
             AppError::ProjectNotFound | AppError::DocumentNotFound | AppError::RevisionNotFound => {
                 Self::new(StatusCode::NOT_FOUND, ErrorCode::NotFound, message)
             }
-            AppError::Project(ProjectError::Archived)
-            | AppError::Document(DocumentError::Archived) => {
+            // 登録では起きないアーカイブの操作のエラーも、同じ「アーカイブしたもの」として返す
+            AppError::Project(ProjectError::Archived | ProjectError::ArchivedWithDocuments)
+            | AppError::Document(DocumentError::Archived | DocumentError::AlreadyArchived) => {
                 Self::new(StatusCode::CONFLICT, ErrorCode::Archived, message)
             }
             AppError::Repository(_) | AppError::Storage(_) => {

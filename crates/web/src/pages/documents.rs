@@ -1,5 +1,8 @@
 //! 資料の一覧（すべての資料 `/`、自分が更新した資料 `/?author=me`、プロジェクトの資料一覧 `/{project}`）。
 //!
+//! 資料をアーカイブした直後は、プロジェクトの資料一覧を `?archived=<資料の slug>` を付けて開き、通知を出す
+//! （[`super::archive`]）。
+//!
 //! 絞り込みと並び順は URL のクエリで持ち、サーバーで絞る（[`params`]）。行を選ぶと、右のプレビュー欄だけを
 //! サーバーで描き直す（[`preview`] の shard）。「この中を絞り込む」は表示中の行をブラウザで絞る（`assets/app.js`）。
 
@@ -29,6 +32,7 @@ use topcoat::{
 };
 
 use self::params::ListParams;
+use super::archive::{archived_notice, archived_toast};
 use crate::{WebApp, author, date, icon, mcp_command, search};
 
 mod param {
@@ -42,6 +46,8 @@ struct ListQuery {
     week: Option<String>,
     project: Option<String>,
     sort: Option<String>,
+    /// アーカイブした直後の通知を出す合図（`?archived=<資料の slug>`）。プロジェクトの資料一覧だけで使う。
+    archived: Option<String>,
 }
 
 fn list_params(cx: &Cx) -> ListParams {
@@ -173,6 +179,10 @@ pub async fn project_documents(cx: &Cx) -> Result<impl View> {
     };
     let now = date::now();
     let rows = Rows::load(app, &params, Some(project.id), author.as_ref(), &now).await?;
+    let archived_slug = query_params::<ListQuery>(cx)
+        .ok()
+        .and_then(|query| query.archived.as_deref());
+    let archived = archived_notice(app, &project, archived_slug).await?;
     let path = format!("/{}", project.slug);
     let mcp_url = mcp_command::url(&app.app_url, host(cx));
     let command = mcp_command::claude_code(&mcp_url, author.as_ref().map(AuthorName::as_str));
@@ -208,6 +218,9 @@ pub async fn project_documents(cx: &Cx) -> Result<impl View> {
             empty: empty,
             now: &now,
         )
+        if let Some(document) = &archived {
+            archived_toast(document: document)
+        }
     })
 }
 
