@@ -12,7 +12,7 @@ use galley_core::{
     },
     domain::{
         blob::BlobStore, document::DocumentRepository, project::ProjectRepository,
-        revision::RevisionRepository, upload::MAX_HTML_BYTES,
+        revision::RevisionRepository, upload::HtmlSizeLimit,
     },
 };
 use galley_web::AppUrl;
@@ -27,9 +27,6 @@ use crate::{
     mcp::{GalleyMcp, McpApp},
 };
 
-/// MCP のリクエストの大きさの上限。HTML の上限に、JSON のエスケープで増える分の余裕を持たせる。
-const MCP_BODY_LIMIT: usize = MAX_HTML_BYTES * 2 + 1024 * 1024;
-
 /// ユースケースに渡すリポジトリとストレージ。実装（adapter）は `main.rs` で作る。
 #[derive(Clone)]
 pub struct Ports {
@@ -39,8 +36,8 @@ pub struct Ports {
     pub blobs: Arc<dyn BlobStore>,
 }
 
-/// MCP から使うユースケースを組み立てる。
-pub fn mcp_app(ports: Ports, app_url: AppUrl) -> Arc<McpApp> {
+/// MCP から使うユースケースを組み立てる。`html_size_limit` は1ファイルのサイズ上限。
+pub fn mcp_app(ports: Ports, app_url: AppUrl, html_size_limit: HtmlSizeLimit) -> Arc<McpApp> {
     let Ports {
         projects,
         documents,
@@ -54,19 +51,28 @@ pub fn mcp_app(ports: Ports, app_url: AppUrl) -> Arc<McpApp> {
         find_document: FindDocument::new(documents.clone()),
         find_revision: FindRevision::new(revisions.clone()),
         read_revision: ReadRevisionContent::new(revisions.clone(), blobs.clone()),
-        create_document: CreateDocument::new(projects, documents.clone(), blobs.clone()),
-        add_revision: AddRevision::new(documents.clone(), revisions, blobs),
+        create_document: CreateDocument::new(
+            projects,
+            documents.clone(),
+            blobs.clone(),
+            html_size_limit,
+        ),
+        add_revision: AddRevision::new(documents.clone(), revisions, blobs, html_size_limit),
         archive_document: ArchiveDocument::new(documents),
         app_url,
     })
 }
 
 /// `/mcp` 以外はすべて画面（`web`）に渡す。Host の検査を一番外に置く。
+///
+/// `html_size_limit` には `mcp_app` に渡したものと同じ1ファイルのサイズ上限を渡す。MCP のリクエストの
+/// 大きさの上限は、ここから決める（[`HtmlSizeLimit::json_body_limit`]。JSON のエスケープで増える分の余裕）。
 pub fn app_router<W>(
     web: W,
     mcp_app: Arc<McpApp>,
     allowed_hosts: &Arc<AllowedHosts>,
     mcp_token: Arc<McpToken>,
+    html_size_limit: HtmlSizeLimit,
 ) -> Router
 where
     W: Service<Request, Error = Infallible> + Clone + Send + Sync + 'static,
@@ -83,7 +89,9 @@ where
             mcp_token,
             guard::check_mcp_token,
         ))
-        .layer(RequestBodyLimitLayer::new(MCP_BODY_LIMIT))
+        .layer(RequestBodyLimitLayer::new(
+            html_size_limit.json_body_limit(),
+        ))
         .service(mcp);
     Router::new()
         .nest_service("/mcp", mcp)
@@ -122,6 +130,13 @@ mod tests {
 
     impl Mcp {
         async fn new(token: Option<&str>) -> TestResult<Self> {
+            Self::with_limit(token, HtmlSizeLimit::DEFAULT).await
+        }
+
+        async fn with_limit(
+            token: Option<&str>,
+            html_size_limit: HtmlSizeLimit,
+        ) -> TestResult<Self> {
             let database = SqliteDatabase::in_memory().await?;
             CreateProject::new(Arc::new(database.projects()))
                 .execute(&ProjectInput {
@@ -144,9 +159,11 @@ mod tests {
                         blobs: Arc::new(ObjectStoreBlobStore::in_memory()),
                     },
                     AppUrl::FromRequest,
+                    html_size_limit,
                 ),
                 &Arc::new(AllowedHosts::parse(None)?),
                 Arc::new(McpToken::from_env(token.map(str::to_owned))),
+                html_size_limit,
             );
             Ok(Self {
                 router,
@@ -202,7 +219,11 @@ mod tests {
         }
 
         async fn connect(token: Option<&str>) -> TestResult<Self> {
-            let mut mcp = Self::new(token).await?;
+            Self::connect_with(Self::new(token).await?, token).await
+        }
+
+        /// `initialize` と `notifications/initialized` を送って、ツールを呼べるようにする。
+        async fn connect_with(mut mcp: Self, token: Option<&str>) -> TestResult<Self> {
             let auth = token.map(|t| format!("Bearer {t}"));
             let headers: Vec<(&str, &str)> =
                 auth.iter().map(|a| ("authorization", a.as_str())).collect();
@@ -600,12 +621,48 @@ mod tests {
         Ok(())
     }
 
+    fn create_request(html: &str) -> Value {
+        json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_document","arguments":{"project":"sales","title":"大","html":html}}})
+    }
+
     #[tokio::test]
     async fn oversized_request_is_rejected() -> TestResult {
         let mcp = Mcp::connect(None).await?;
-        let html = "a".repeat(MCP_BODY_LIMIT);
-        let request = json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_document","arguments":{"project":"sales","title":"大","html":html}}});
-        let (status, _, _) = mcp.post(&request, &[AUTHOR]).await?;
+        let html = "a".repeat(HtmlSizeLimit::DEFAULT.json_body_limit());
+        let (status, _, _) = mcp.post(&create_request(&html), &[AUTHOR]).await?;
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+        Ok(())
+    }
+
+    /// 起動時に設定した上限に、HTML の検査とリクエストの大きさの上限が揃う。
+    #[tokio::test]
+    async fn configured_size_limit_is_applied() -> TestResult {
+        let limit = HtmlSizeLimit::parse("1KB")?;
+        let mcp = Mcp::connect_with(Mcp::with_limit(None, limit).await?, None).await?;
+
+        let fits = format!("<p>{}", "a".repeat(1024 - 3));
+        let (text, is_error) = mcp
+            .call(
+                "create_document",
+                json!({"project":"sales","title":"小","html":fits}),
+                &[AUTHOR],
+            )
+            .await?;
+        assert!(!is_error, "{text}");
+
+        // リクエストの上限（1KB * 2 + 1MiB）より小さければ、ツールのエラーとして上限を伝える
+        let (text, is_error) = mcp
+            .call(
+                "create_document",
+                json!({"project":"sales","title":"大","html":format!("{fits}a")}),
+                &[AUTHOR],
+            )
+            .await?;
+        assert!(is_error, "{text}");
+        assert!(text.contains("上限は 1024 バイト"), "{text}");
+
+        let html = "a".repeat(limit.json_body_limit());
+        let (status, _, _) = mcp.post(&create_request(&html), &[AUTHOR]).await?;
         assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
         Ok(())
     }

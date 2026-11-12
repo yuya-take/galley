@@ -25,7 +25,7 @@ use galley_core::{
         },
         revision::{AddRevision, ListRevisions, RevertToRevision},
     },
-    domain::{project::ProjectSummary, shared::ArchiveFilter},
+    domain::{project::ProjectSummary, shared::ArchiveFilter, upload::HtmlSizeLimit},
 };
 use topcoat::{
     asset::{AssetBundle, RouterBuilderAssetExt},
@@ -71,6 +71,9 @@ pub struct WebApp {
     pub viewer_url: ViewerUrl,
     /// アプリの URL（空のプロジェクトに出す MCP の登録コマンド、URL の欄の前の「<ホスト>/」）。
     pub app_url: AppUrl,
+    /// 1ファイルのサイズ上限（登録の API のボディの上限と文言、ダイアログでの事前の確認）。
+    /// `create_document`・`add_revision` に渡したものと同じ値にする。
+    pub html_size_limit: HtmlSizeLimit,
 }
 
 impl WebApp {
@@ -85,7 +88,8 @@ impl WebApp {
 /// アセット（runtime のスクリプト、CSS、書体など）は `topcoat asset bundle` で作ったバンドルを
 /// 実行ファイルの隣から読み込む。
 pub fn service(app: Arc<WebApp>) -> std::io::Result<TowerService> {
-    let mut builder = routes(Router::builder().app_context(app));
+    let html_size_limit = app.html_size_limit;
+    let mut builder = routes(Router::builder().app_context(app), html_size_limit);
     for font in fonts::ALL {
         builder = builder.font(font);
     }
@@ -94,8 +98,8 @@ pub fn service(app: Arc<WebApp>) -> std::io::Result<TowerService> {
 }
 
 /// レイアウト・画面・procedure を登録する。
-fn routes(builder: RouterBuilder) -> RouterBuilder {
-    upload::routes(builder)
+fn routes(builder: RouterBuilder, html_size_limit: HtmlSizeLimit) -> RouterBuilder {
+    upload::routes(builder, html_size_limit)
         .layout(layout::root_layout)
         .page(pages::documents::all_documents)
         .page(pages::documents::project_documents)
@@ -126,6 +130,6 @@ mod tests {
     /// ルートが衝突すると起動時に panic するので、テストで先に見つける。
     #[test]
     fn routes_do_not_conflict() {
-        let _router = routes(Router::builder()).build();
+        let _router = routes(Router::builder(), HtmlSizeLimit::DEFAULT).build();
     }
 }

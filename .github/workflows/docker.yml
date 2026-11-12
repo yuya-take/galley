@@ -160,7 +160,7 @@ jobs:
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             --annotation "index:org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --annotation "index:org.opencontainers.image.licenses=MIT" \
+            --annotation "index:org.opencontainers.image.licenses=MIT OR Apache-2.0" \
             $(printf "$IMAGE@sha256:%s " *)
       - name: 確認
         run: docker buildx imagetools inspect "$IMAGE:$DOCKER_METADATA_OUTPUT_VERSION"
