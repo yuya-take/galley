@@ -46,13 +46,14 @@
   const normalizeText = (text) => text.normalize("NFKC").toLowerCase();
   const searchTerms = (query) => normalizeText(query).split(/\s+/).filter((term) => term !== "");
   const normalizedTexts = new WeakMap();
-  // 要素の data-* の文字列を正規化して覚えておく（入力のたびに正規化し直さない）
+  // 要素の data-* の文字列を正規化して覚えておく（入力のたびに正規化し直さない）。
+  // サーバーで描き直して値が変わったら正規化し直す
   const textOf = (element, key) => {
-    let text = normalizedTexts.get(element);
-    if (text === undefined) {
-      text = normalizeText(element.dataset[key] ?? "");
-      normalizedTexts.set(element, text);
-    }
+    const raw = element.dataset[key] ?? "";
+    const cached = normalizedTexts.get(element);
+    if (cached?.raw === raw) return cached.text;
+    const text = normalizeText(raw);
+    normalizedTexts.set(element, { raw, text });
     return text;
   };
   const matchesTerms = (text, terms) => terms.every((term) => text.includes(term));
@@ -210,14 +211,15 @@
       document.querySelectorAll("[data-action=search] kbd").forEach((kbd) => { kbd.textContent = "Ctrl K"; });
     }
 
-    const select = (option) => {
+    // マウスで選んだときはスクロールしない（乗せただけで一覧が動かないように）
+    const select = (option, { scroll = true } = {}) => {
       searchDialog.querySelectorAll('[role="option"][aria-selected="true"]').forEach((other) => {
         other.setAttribute("aria-selected", "false");
       });
       if (option) {
         option.setAttribute("aria-selected", "true");
         searchInput.setAttribute("aria-activedescendant", option.id);
-        option.scrollIntoView({ block: "nearest" });
+        if (scroll) option.scrollIntoView({ block: "nearest" });
       } else {
         searchInput.removeAttribute("aria-activedescendant");
       }
@@ -318,7 +320,7 @@
     // マウスを乗せた候補を選ぶ（押すとリンクとして開く）
     searchDialog.addEventListener("mousemove", (event) => {
       const option = event.target.closest('[role="option"]');
-      if (option && option.getAttribute("aria-selected") !== "true") select(option);
+      if (option && option.getAttribute("aria-selected") !== "true") select(option, { scroll: false });
     });
 
     // ダイアログの外（背景）を押したら閉じる
