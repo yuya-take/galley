@@ -1,10 +1,13 @@
 //! Galley の起動処理。
 //!
 //! 画面と MCP（:8080）、資料配信（:8081）を同じプロセスで立ち上げる。
+//! 管理用のサブコマンド（`galley purge` など）は `cli`。
 
 mod app;
+mod cli;
 mod guard;
 mod mcp;
+mod purge;
 mod viewer;
 
 use std::{
@@ -45,6 +48,11 @@ const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // 引数があれば管理用のサブコマンドを実行する。引数が無ければサーバーとして起動する
+    if let Some(command) = cli::Command::from_args(std::env::args_os().skip(1))? {
+        return command.run().await;
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();

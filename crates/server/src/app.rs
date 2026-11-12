@@ -110,7 +110,10 @@ mod tests {
     use axum::{body::Body, http::StatusCode};
     use galley_core::{
         adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
-        app::project::{ArchiveProject, CreateProject, ProjectInput},
+        app::{
+            document::PurgeDocument,
+            project::{ArchiveProject, CreateProject, ProjectInput},
+        },
     };
     use http::Request as HttpRequest;
     use http_body_util::BodyExt;
@@ -360,6 +363,73 @@ mod tests {
         assert_eq!(first["html"], HTML_V1);
         assert_eq!(first["revision_number"], 1);
         assert_eq!(first["url"], "http://localhost:8080/sales/plan/v/1");
+        Ok(())
+    }
+
+    /// 版を物理削除（`galley purge`）して番号が欠けても、ほかの版は読めて、消した版は見つからない。
+    #[tokio::test]
+    async fn get_document_after_revision_is_purged() -> TestResult {
+        let mcp = Mcp::connect(None).await?;
+        let (text, is_error) = mcp
+            .call(
+                "create_document",
+                json!({"project":"sales","title":"計画","html":HTML_V1,"slug":"plan"}),
+                &[AUTHOR],
+            )
+            .await?;
+        assert!(!is_error, "{text}");
+        for html in [HTML_V2, "<!doctype html><title>計画</title><p>第3版"] {
+            let (text, is_error) = mcp
+                .call(
+                    "update_document",
+                    json!({"project":"sales","document":"plan","html":html,"message":"更新"}),
+                    &[AUTHOR],
+                )
+                .await?;
+            assert!(!is_error, "{text}");
+        }
+        // DB の版だけを消せば足りるので、ストレージは MCP と別の空のものを渡す
+        let purge = PurgeDocument::new(
+            Arc::new(mcp.database.projects()),
+            Arc::new(mcp.database.documents()),
+            Arc::new(mcp.database.revisions()),
+            Arc::new(ObjectStoreBlobStore::in_memory()),
+        );
+        let plan = purge.plan("sales", "plan", Some(2)).await?;
+        purge.execute(&plan).await?;
+
+        let get = |revision: Option<u32>| {
+            let arguments = match revision {
+                Some(n) => json!({"project":"sales","document":"plan","revision":n}),
+                None => json!({"project":"sales","document":"plan"}),
+            };
+            mcp.call("get_document", arguments, &[])
+        };
+        let (text, is_error) = get(Some(2)).await?;
+        assert!(is_error, "{text}");
+        let (text, is_error) = get(Some(1)).await?;
+        assert!(!is_error, "{text}");
+        assert_eq!(serde_json::from_str::<Value>(&text)?["html"], HTML_V1);
+        let (text, _) = get(None).await?;
+        let latest: Value = serde_json::from_str(&text)?;
+        assert_eq!(latest["revision_number"], 3);
+        assert_eq!(latest["latest_revision_number"], 3);
+
+        let (text, _) = mcp
+            .call("list_documents", json!({"project":"sales"}), &[])
+            .await?;
+        assert_eq!(
+            serde_json::from_str::<Value>(&text)?[0]["revision_number"],
+            3
+        );
+        let (text, _) = mcp
+            .call(
+                "update_document",
+                json!({"project":"sales","document":"plan","html":HTML_V2,"message":"戻す"}),
+                &[AUTHOR],
+            )
+            .await?;
+        assert_eq!(serde_json::from_str::<Value>(&text)?["revision_number"], 4);
         Ok(())
     }
 

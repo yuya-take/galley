@@ -117,6 +117,15 @@ impl BlobStore for ObjectStoreBlobStore {
             .map(Some)
             .map_err(|err| StorageError::Corrupted(err.to_string()))
     }
+
+    /// 実体を消す。ローカルのときは空になったディレクトリ（`ab/cd/`）は残す（登録と同時に消すと、
+    /// 登録側が書き込むディレクトリを消してしまうため）。
+    async fn delete(&self, hash: &BlobHash) -> Result<(), StorageError> {
+        match self.store.delete(&location(hash)).await {
+            Ok(()) | Err(object_store::Error::NotFound { .. }) => Ok(()),
+            Err(err) => Err(backend_error(err)),
+        }
+    }
 }
 
 #[cfg(test)]

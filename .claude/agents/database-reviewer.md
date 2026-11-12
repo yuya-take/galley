@@ -26,7 +26,7 @@ DB 関連の変更をコードベースからレビューする。規約は `.cl
 
 ### データの整合性（CRITICAL）
 
-- [ ] **不変**: revisions・blobs を UPDATE / DELETE する経路がない
+- [ ] **不変**: revisions・blobs を UPDATE する経路がない。DELETE は物理削除（`DocumentRepository::purge`・`purge_revision`）だけで、参照の残るブロブを消していない
 - [ ] **保存の順序**: ブロブを書いてから DB を更新している
 - [ ] **トランザクション**: リビジョンの作成と `current_revision_id` の更新が1トランザクション
 - [ ] **版番号**: (document_id, number) の一意制約があり、同時更新でも番号が重複しない
@@ -38,7 +38,7 @@ DB 関連の変更をコードベースからレビューする。規約は `.cl
 - [ ] **参照の整合**: Toasty は外部キー制約を作らないので、ユースケースで参照先の存在を確かめている
 - [ ] **インデックス**: 検索・JOIN に使う列（project_id、document_id、slug、archived_at）にある
 - [ ] **NOT NULL**: 必須列に付いている
-- [ ] **論理削除**: projects・documents は `archived_at` で、物理削除していない
+- [ ] **論理削除**: projects・documents は `archived_at` で、物理削除は `galley purge` の経路だけ
 - [ ] **一意制約**: projects.slug、(project_id, documents.slug)
 - [ ] **時刻**: UTC で保存している
 - [ ] **命名**: `snake_case`、テーブル名は複数形

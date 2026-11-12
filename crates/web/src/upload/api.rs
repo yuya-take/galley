@@ -298,7 +298,9 @@ impl From<AppError> for ApiError {
             | AppError::InvalidCrestColor(_)
             | AppError::ProjectSlugTaken(_)
             | AppError::Document(
-                DocumentError::AlreadyLatest(_) | DocumentError::RevisionMismatch,
+                DocumentError::AlreadyLatest(_)
+                | DocumentError::RevisionMismatch
+                | DocumentError::PurgeLatest(_),
             ) => Self::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 ErrorCode::InvalidInput,

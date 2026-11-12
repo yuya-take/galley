@@ -29,11 +29,11 @@ slug は英小文字・数字・ハイフンだけ。資料の slug はファイ
 ## パターン
 
 - **主キー**: UUID v7（時系列でソートできる）
-- **論理削除**: `archived_at`（NULL なら有効）。projects と documents だけ。物理削除はしない
-- **不変**: revisions と blobs は INSERT のみ。UPDATE / DELETE しない
+- **論理削除**: `archived_at`（NULL なら有効）。projects と documents だけ。物理削除は `galley purge`（コンテナ内のコマンド）の `DocumentRepository::purge`・`purge_revision` だけが行う
+- **不変**: revisions と blobs は INSERT のみ。UPDATE しない。DELETE は上の物理削除だけで、版と資料を消すのと同じトランザクションで、どの版からも参照されなくなった blobs の行を消す
 - **過去版に戻す**: 過去版と同じ blob_hash を指す新しいリビジョンを作り、`restored_from_number` に元の版番号を入れる（履歴を書き換えない）
 - **時刻**: UTC で保存する
-- **外部キー**: Toasty は外部キー制約を作らず、接続ごとの PRAGMA（`foreign_keys` など）も設定できない。参照の整合はユースケースで保つ（存在を確かめてから作る、物理削除しない）
+- **外部キー**: Toasty は外部キー制約を作らず、接続ごとの PRAGMA（`foreign_keys` など）も設定できない。参照の整合はユースケースで保つ（存在を確かめてから作る。物理削除は資料とその版、参照の無くなったブロブをまとめて消す）
 - **WAL**: `SqliteDatabase::open` で `PRAGMA journal_mode = WAL` を1回実行する（DB ファイルに記録される）。`busy_timeout` は rusqlite の既定（5秒）
 - **書き込みは1本ずつ**: 書き込むメソッドは最初に `WriteLock::acquire` で順番待ちする。読んでから書くトランザクションは `begin_write`（`BEGIN IMMEDIATE`）で始める
 - **版番号**: 現在版の番号 + 1。`(document_id, number)` の一意制約で重なりを `Conflict` にし、ユースケースが読み直してやり直す（`app::revision` の `MAX_ATTEMPTS` 回）

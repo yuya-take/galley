@@ -3,15 +3,15 @@ use toasty::stmt::{Type, Value};
 use toasty_core::driver::operation::TransactionMode;
 
 use crate::domain::{
-    blob::Blob,
+    blob::{Blob, BlobHash},
     document::{
         Document, DocumentListItem, DocumentOrder, DocumentQuery, DocumentRepository, DocumentSlug,
-        DocumentTitle,
+        DocumentTitle, PurgedRevisions,
     },
     error::RepositoryError,
     project::{CrestColor, Project, ProjectName, ProjectSlug},
     revision::{AuthorName, Revision, RevisionMessage, RevisionNumber},
-    shared::{ArchiveFilter, DocumentId, ProjectId},
+    shared::{ArchiveFilter, DocumentId, ProjectId, RevisionId},
 };
 
 use super::{
@@ -88,6 +88,84 @@ async fn insert_revision_record(
     Ok(())
 }
 
+/// 版を保存する前に、資料と（戻す操作なら）戻す元のブロブの情報が、物理削除されていないかを確かめる。
+///
+/// 戻す操作はブロブを渡さず、戻す元の版の実体を使う。その版が消されてブロブの情報も消えていれば、
+/// 実体もストレージから消されるので、保存すると実体の無い版になってしまう。
+async fn ensure_not_purged(
+    tx: &mut toasty::Transaction<'_>,
+    document: &Document,
+    revision: &Revision,
+    is_reusing_blob: bool,
+) -> Result<(), RepositoryError> {
+    let has_document = DocumentRecord::filter_by_id(document.id.as_uuid())
+        .first()
+        .exec(tx)
+        .await
+        .map_err(backend_error)?
+        .is_some();
+    if !has_document {
+        return Err(RepositoryError::Conflict(format!(
+            "資料 {} は消されました",
+            document.id
+        )));
+    }
+    if is_reusing_blob {
+        let has_blob = BlobRecord::filter_by_hash(revision.blob_hash.as_str())
+            .first()
+            .exec(tx)
+            .await
+            .map_err(backend_error)?
+            .is_some();
+        if !has_blob {
+            return Err(RepositoryError::Conflict(format!(
+                "ブロブ {} は消されました",
+                revision.blob_hash
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// 消した版の番号を集め、消した版のブロブのうち、どの版からも参照されなくなったものの情報を消す。
+/// 版を消したあと、同じトランザクションの中で呼ぶ。
+async fn delete_unreferenced_blobs(
+    tx: &mut toasty::Transaction<'_>,
+    deleted: Vec<RevisionRecord>,
+) -> Result<PurgedRevisions, RepositoryError> {
+    let mut purged = PurgedRevisions::default();
+    let mut hashes: Vec<String> = Vec::new();
+    for record in deleted {
+        purged.numbers.push(
+            RevisionNumber::new(record.number).map_err(|e| corrupted("revisions.number", e))?,
+        );
+        if !hashes.contains(&record.blob_hash) {
+            hashes.push(record.blob_hash);
+        }
+    }
+    let fields = RevisionRecord::fields();
+    for hash in hashes {
+        let is_used = RevisionRecord::filter(fields.blob_hash().eq(hash.as_str()))
+            .first()
+            .exec(tx)
+            .await
+            .map_err(backend_error)?
+            .is_some();
+        if is_used {
+            continue;
+        }
+        BlobRecord::filter_by_hash(hash.as_str())
+            .delete()
+            .exec(tx)
+            .await
+            .map_err(backend_error)?;
+        purged
+            .unreferenced_blobs
+            .push(BlobHash::parse(&hash).map_err(|e| corrupted("revisions.blob_hash", e))?);
+    }
+    Ok(purged)
+}
+
 #[async_trait]
 impl DocumentRepository for ToastyDocumentRepository {
     async fn insert_with_first_revision(
@@ -125,6 +203,9 @@ impl DocumentRepository for ToastyDocumentRepository {
         let _write = self.writes.acquire().await;
         let mut db = self.db.clone();
         let mut tx = begin_write(&mut db).await?;
+        // 読んでから保存するまでの間に、別のプロセス（`galley purge`）が資料や戻す元の版を物理削除して
+        // いれば Conflict にする。呼び出し側は読み直して、資料や版が見つからないエラーにする
+        ensure_not_purged(&mut tx, document, revision, blob.is_none()).await?;
         if let Some(blob) = blob {
             insert_blob_if_missing(&mut tx, blob).await?;
         }
@@ -232,6 +313,51 @@ impl DocumentRepository for ToastyDocumentRepository {
         let mut db = self.db.clone();
         let rows = list_sql(query).exec(&mut db).await.map_err(backend_error)?;
         rows.into_iter().map(list_item).collect()
+    }
+
+    async fn purge(&self, id: DocumentId) -> Result<PurgedRevisions, RepositoryError> {
+        let _write = self.writes.acquire().await;
+        let mut db = self.db.clone();
+        let mut tx = begin_write(&mut db).await?;
+        let fields = RevisionRecord::fields();
+        // 計画を見せたあとに足された版も、資料と一緒に消す
+        let revisions = RevisionRecord::filter(fields.document_id().eq(id.as_uuid()))
+            .order_by(fields.number().desc())
+            .exec(&mut tx)
+            .await
+            .map_err(backend_error)?;
+        RevisionRecord::filter(fields.document_id().eq(id.as_uuid()))
+            .delete()
+            .exec(&mut tx)
+            .await
+            .map_err(backend_error)?;
+        DocumentRecord::filter_by_id(id.as_uuid())
+            .delete()
+            .exec(&mut tx)
+            .await
+            .map_err(backend_error)?;
+        let purged = delete_unreferenced_blobs(&mut tx, revisions).await?;
+        tx.commit().await.map_err(backend_error)?;
+        Ok(purged)
+    }
+
+    async fn purge_revision(&self, id: RevisionId) -> Result<PurgedRevisions, RepositoryError> {
+        let _write = self.writes.acquire().await;
+        let mut db = self.db.clone();
+        let mut tx = begin_write(&mut db).await?;
+        let revision = RevisionRecord::filter_by_id(id.as_uuid())
+            .first()
+            .exec(&mut tx)
+            .await
+            .map_err(backend_error)?;
+        RevisionRecord::filter_by_id(id.as_uuid())
+            .delete()
+            .exec(&mut tx)
+            .await
+            .map_err(backend_error)?;
+        let purged = delete_unreferenced_blobs(&mut tx, revision.into_iter().collect()).await?;
+        tx.commit().await.map_err(backend_error)?;
+        Ok(purged)
     }
 }
 
