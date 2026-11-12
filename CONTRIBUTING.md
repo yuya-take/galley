@@ -7,6 +7,7 @@ Galley への貢献を歓迎します。バグ報告、機能の提案、ドキ�
 - 設計の全体像は [docs/design.md](docs/design.md) にあります。大きな変更の前に読んでください
 - 機能の追加や設計に関わる変更は、PR の前に Issue で相談してください。小さなバグ修正やドキュメントの修正は、そのまま PR を出して構いません
 - 脆弱性は公開の Issue にせず、[SECURITY.md](SECURITY.md) の手順で報告してください
+- 送られた変更は、このリポジトリと同じ MIT と Apache-2.0 のデュアルライセンスで公開されます（[README の「ライセンス」](README.md#ライセンス)）
 
 ## 開発環境
 
@@ -73,6 +74,26 @@ cargo run -p galley-migrate -- migration generate --name add_xxx
 - `main` はリリース用です
 - ブランチ名の例：`feat/123-short-desc`、`fix/456-short-desc`、`docs/short-desc`、`chore/short-desc`（数字は Issue 番号）
 
+### フォークして PR を出す
+
+このリポジトリに直接 push できるのはメンテナーだけです。GitHub でフォークし、フォーク側でブランチを切ってください。
+
+```bash
+gh repo fork yuya-take/galley-docs --clone
+cd galley-docs
+git fetch upstream
+git switch -c feat/123-short-desc upstream/develop
+```
+
+変更をコミットしたらフォークに push し、このリポジトリの `develop` に向けて PR を出します。
+
+```bash
+git push -u origin feat/123-short-desc
+gh pr create --repo yuya-take/galley-docs --base develop
+```
+
+PR の本文は [テンプレート](.github/PULL_REQUEST_TEMPLATE.md) に沿って書いてください。
+
 ## コミットメッセージ
 
 ```
@@ -94,3 +115,4 @@ fix(web): 過去版を表示したときに帯が出ない問題を修正
 
 - CI（`fmt`、`clippy`、`test`、`architecture`）がすべて通る必要があります
 - メンテナーの承認が1件必要です
+- マージはメンテナーが行います
