@@ -129,6 +129,7 @@ claude mcp add --transport http galley http://galley.example.com:8080/mcp \
 | `get_document` | 資料の情報と、指定した版（`revision`。省略時は最新）の HTML。過去の版なら URL も `/v/<番号>` 付き |
 | `create_document` | 新しい資料を第1版として登録する（`slug` は省略可） |
 | `update_document` | 既存の資料に新しい版を追加する（`message` に何を変えたか） |
+| `archive_document` | 資料をアーカイブする（一覧に出なくなる。戻すのは画面のアーカイブから） |
 
 ## ドキュメント
 
