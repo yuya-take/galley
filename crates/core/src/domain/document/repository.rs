@@ -25,6 +25,8 @@ pub trait DocumentRepository: Send + Sync {
     /// ブロブの情報は渡されたときだけ、同じハッシュが無ければ保存する（戻す操作では渡さない）。
     ///
     /// 同じ番号の版が既にある（同時に別の版が追加された）ときは [`RepositoryError::Conflict`] を返す。
+    /// 読んでから保存するまでの間に、資料か、戻す元の版のブロブ（`blob` が `None` のとき）が
+    /// 物理削除されたときも [`RepositoryError::Conflict`] を返す（読み直すと見つからない）。
     async fn insert_revision(
         &self,
         document: &Document,

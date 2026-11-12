@@ -88,6 +88,45 @@ async fn insert_revision_record(
     Ok(())
 }
 
+/// 版を保存する前に、資料と（戻す操作なら）戻す元のブロブの情報が、物理削除されていないかを確かめる。
+///
+/// 戻す操作はブロブを渡さず、戻す元の版の実体を使う。その版が消されてブロブの情報も消えていれば、
+/// 実体もストレージから消されるので、保存すると実体の無い版になってしまう。
+async fn ensure_not_purged(
+    tx: &mut toasty::Transaction<'_>,
+    document: &Document,
+    revision: &Revision,
+    is_reusing_blob: bool,
+) -> Result<(), RepositoryError> {
+    let has_document = DocumentRecord::filter_by_id(document.id.as_uuid())
+        .first()
+        .exec(tx)
+        .await
+        .map_err(backend_error)?
+        .is_some();
+    if !has_document {
+        return Err(RepositoryError::Conflict(format!(
+            "資料 {} は消されました",
+            document.id
+        )));
+    }
+    if is_reusing_blob {
+        let has_blob = BlobRecord::filter_by_hash(revision.blob_hash.as_str())
+            .first()
+            .exec(tx)
+            .await
+            .map_err(backend_error)?
+            .is_some();
+        if !has_blob {
+            return Err(RepositoryError::Conflict(format!(
+                "ブロブ {} は消されました",
+                revision.blob_hash
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// 消した版の番号を集め、消した版のブロブのうち、どの版からも参照されなくなったものの情報を消す。
 /// 版を消したあと、同じトランザクションの中で呼ぶ。
 async fn delete_unreferenced_blobs(
@@ -164,6 +203,9 @@ impl DocumentRepository for ToastyDocumentRepository {
         let _write = self.writes.acquire().await;
         let mut db = self.db.clone();
         let mut tx = begin_write(&mut db).await?;
+        // 読んでから保存するまでの間に、別のプロセス（`galley purge`）が資料や戻す元の版を物理削除して
+        // いれば Conflict にする。呼び出し側は読み直して、資料や版が見つからないエラーにする
+        ensure_not_purged(&mut tx, document, revision, blob.is_none()).await?;
         if let Some(blob) = blob {
             insert_blob_if_missing(&mut tx, blob).await?;
         }

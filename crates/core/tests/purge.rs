@@ -25,10 +25,14 @@ use galley_core::{
         },
         error::RepositoryError,
         project::{Project, ProjectSlug},
-        revision::{Revision, RevisionNumber, RevisionRepository, RevisionSource},
+        revision::{
+            AuthorName, NewRevision, Revision, RevisionMessage, RevisionNumber, RevisionRepository,
+            RevisionSource,
+        },
         shared::{DocumentId, ProjectId, RevisionId},
     },
 };
+use jiff::Timestamp;
 
 type TestResult = Result<(), Box<dyn Error>>;
 
@@ -391,6 +395,77 @@ async fn purge_revision_keeps_blob_used_by_restored_revision() -> TestResult {
 }
 
 // ---- サーバーが動いている間 ----
+
+#[tokio::test]
+async fn revert_to_revision_purged_meanwhile_is_rejected() -> TestResult {
+    let fx = Fixture::new().await?;
+    let created = fx.create("plan.html", V2).await?;
+    let id = created.document.id;
+    let second = fx.add(id, V1).await?;
+
+    // 「この版に戻す」が第1版を読んだあと、保存する前に第1版が消された
+    let mut document = second.document.clone();
+    let reverted = document.revert_to(
+        &second.revision,
+        &created.revision,
+        AuthorName::parse("鈴木")?,
+        RevisionSource::Web,
+        Timestamp::now(),
+    )?;
+    let plan = fx.purge().plan("sales", "plan", Some(1)).await?;
+    fx.purge().execute(&plan).await?;
+    assert!(matches!(
+        fx.database
+            .documents()
+            .insert_revision(&document, &reverted, None)
+            .await,
+        Err(RepositoryError::Conflict(_))
+    ));
+    // 読み直すと、戻す元の版は見つからない
+    assert!(matches!(
+        fx.revert(id, 1).await,
+        Err(AppError::RevisionNotFound)
+    ));
+    assert_eq!(fx.numbers(id).await?, vec![2]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn adding_to_document_purged_meanwhile_is_rejected() -> TestResult {
+    let fx = Fixture::new().await?;
+    let created = fx.create("plan.html", V1).await?;
+    let mut document = created.document.clone();
+    let added = document.add_revision(
+        &created.revision,
+        NewRevision {
+            blob_hash: hash(V2),
+            message: RevisionMessage::parse("更新")?,
+            author_name: AuthorName::parse("佐藤")?,
+            source: RevisionSource::Web,
+        },
+        Timestamp::now(),
+    )?;
+    let plan = fx.purge().plan("sales", "plan", None).await?;
+    fx.purge().execute(&plan).await?;
+    let blob = Blob {
+        hash: hash(V2),
+        size: V2.len() as u64,
+        created_at: Timestamp::now(),
+    };
+    assert!(matches!(
+        fx.database
+            .documents()
+            .insert_revision(&document, &added, Some(&blob))
+            .await,
+        Err(RepositoryError::Conflict(_))
+    ));
+    assert!(fx.numbers(created.document.id).await?.is_empty());
+    assert!(matches!(
+        fx.add(created.document.id, V2).await,
+        Err(AppError::DocumentNotFound)
+    ));
+    Ok(())
+}
 
 /// DB から消してコミットした直後に、同じ内容の資料が別に登録されたことにする。
 struct RegisterAfterPurge {
