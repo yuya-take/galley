@@ -145,6 +145,30 @@ impl Registered {
     }
 }
 
+/// アーカイブの結果。
+#[derive(Debug, Serialize)]
+pub struct Archived {
+    /// 「「事業計画」をアーカイブしました。…」。戻し方を利用者に伝えられるようにする。
+    message: String,
+    project: String,
+    slug: String,
+    title: String,
+}
+
+impl Archived {
+    pub fn new(project: &Project, document: &Document) -> Self {
+        Self {
+            message: format!(
+                "「{}」をアーカイブしました。Galley の画面のアーカイブから戻せます",
+                document.title
+            ),
+            project: project.slug.to_string(),
+            slug: document.slug.to_string(),
+            title: document.title.to_string(),
+        }
+    }
+}
+
 /// AI がそのまま直せるエラーの文言。外部リソースで断ったときは、該当箇所と作り直しの依頼文を付ける。
 pub fn describe_error(err: &AppError) -> String {
     let AppError::InvalidUpload(UploadError::ExternalResources(resources)) = err else {

@@ -6,7 +6,7 @@ use std::{convert::Infallible, sync::Arc};
 use axum::{Router, extract::Request, middleware, response::IntoResponse};
 use galley_core::{
     app::{
-        document::{CreateDocument, FindDocument, ListDocuments},
+        document::{ArchiveDocument, CreateDocument, FindDocument, ListDocuments},
         project::{FindProject, ListProjects},
         revision::{AddRevision, FindRevision, ReadRevisionContent},
     },
@@ -55,7 +55,8 @@ pub fn mcp_app(ports: Ports, app_url: AppUrl) -> Arc<McpApp> {
         find_revision: FindRevision::new(revisions.clone()),
         read_revision: ReadRevisionContent::new(revisions.clone(), blobs.clone()),
         create_document: CreateDocument::new(projects, documents.clone(), blobs.clone()),
-        add_revision: AddRevision::new(documents, revisions, blobs),
+        add_revision: AddRevision::new(documents.clone(), revisions, blobs),
+        archive_document: ArchiveDocument::new(documents),
         app_url,
     })
 }
@@ -266,6 +267,7 @@ mod tests {
             "get_document",
             "create_document",
             "update_document",
+            "archive_document",
         ] {
             assert!(names.contains(&name), "{name} がない: {names:?}");
         }
@@ -442,6 +444,132 @@ mod tests {
         let latest: Value = serde_json::from_str(&text)?;
         assert_eq!(latest["latest_revision_number"], 1);
         assert_eq!(latest["html"], HTML_V1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn archive_document_hides_it_from_the_list() -> TestResult {
+        let mcp = Mcp::connect(None).await?;
+        for (title, slug) in [("事業計画", "plan"), ("メモ", "memo")] {
+            let (text, is_error) = mcp
+                .call(
+                    "create_document",
+                    json!({"project":"sales","title":title,"html":HTML_V1,"slug":slug}),
+                    &[AUTHOR],
+                )
+                .await?;
+            assert!(!is_error, "{text}");
+        }
+
+        // 更新者名（X-Author-Name）は無くてよい
+        let (text, is_error) = mcp
+            .call(
+                "archive_document",
+                json!({"project":"sales","document":"plan"}),
+                &[],
+            )
+            .await?;
+        assert!(!is_error, "{text}");
+        let archived: Value = serde_json::from_str(&text)?;
+        assert_eq!(archived["project"], "sales");
+        assert_eq!(archived["slug"], "plan");
+        assert_eq!(archived["title"], "事業計画");
+        assert_eq!(
+            archived["message"],
+            "「事業計画」をアーカイブしました。Galley の画面のアーカイブから戻せます"
+        );
+
+        let (text, _) = mcp
+            .call("list_documents", json!({"project":"sales"}), &[])
+            .await?;
+        let documents: Value = serde_json::from_str(&text)?;
+        let slugs: Vec<&str> = documents
+            .as_array()
+            .ok_or("一覧が配列でない")?
+            .iter()
+            .filter_map(|d| d["slug"].as_str())
+            .collect();
+        assert_eq!(slugs, ["memo"]);
+
+        let (text, is_error) = mcp
+            .call(
+                "get_document",
+                json!({"project":"sales","document":"plan"}),
+                &[],
+            )
+            .await?;
+        assert!(!is_error, "{text}");
+        assert_eq!(serde_json::from_str::<Value>(&text)?["archived"], true);
+
+        // アーカイブ済みの資料
+        let (text, is_error) = mcp
+            .call(
+                "archive_document",
+                json!({"project":"sales","document":"plan"}),
+                &[],
+            )
+            .await?;
+        assert!(is_error);
+        assert_eq!(text, "この資料はすでにアーカイブしています");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn archive_document_rejects_missing_or_archived_project() -> TestResult {
+        let mcp = Mcp::connect(None).await?;
+        let (text, is_error) = mcp
+            .call(
+                "archive_document",
+                json!({"project":"sales","document":"nope"}),
+                &[],
+            )
+            .await?;
+        assert!(is_error);
+        assert_eq!(text, "資料が見つかりません");
+        let (text, is_error) = mcp
+            .call(
+                "archive_document",
+                json!({"project":"nope","document":"plan"}),
+                &[],
+            )
+            .await?;
+        assert!(is_error);
+        assert_eq!(text, "プロジェクトが見つかりません");
+
+        let (text, is_error) = mcp
+            .call(
+                "create_document",
+                json!({"project":"sales","title":"事業計画","html":HTML_V1,"slug":"plan"}),
+                &[AUTHOR],
+            )
+            .await?;
+        assert!(!is_error, "{text}");
+        let projects = Arc::new(mcp.database.projects());
+        let sales = FindProject::new(projects.clone()).execute("sales").await?;
+        ArchiveProject::new(projects).execute(sales.id).await?;
+
+        let (text, is_error) = mcp
+            .call(
+                "archive_document",
+                json!({"project":"sales","document":"plan"}),
+                &[],
+            )
+            .await?;
+        assert!(is_error, "{text}");
+        assert!(
+            text.starts_with("アーカイブしたプロジェクトの資料は、1件ずつはアーカイブできません"),
+            "{text}"
+        );
+
+        // 資料はアーカイブしていない
+        let (text, _) = mcp
+            .call(
+                "get_document",
+                json!({"project":"sales","document":"plan"}),
+                &[],
+            )
+            .await?;
+        assert_eq!(serde_json::from_str::<Value>(&text)?["archived"], false);
         Ok(())
     }
 

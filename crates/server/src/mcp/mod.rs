@@ -11,7 +11,10 @@ use std::sync::Arc;
 
 use galley_core::{
     app::{
-        document::{CreateDocument, CreateDocumentInput, FindDocument, ListDocuments, SlugSource},
+        document::{
+            ArchiveDocument, CreateDocument, CreateDocumentInput, FindDocument, ListDocuments,
+            SlugSource,
+        },
         error::AppError,
         project::{FindProject, ListProjects},
         revision::{AddRevision, FindRevision, ReadRevisionContent, RevisionInput},
@@ -30,7 +33,7 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 
-use output::{DocumentItem, DocumentWithHtml, ProjectItem, Registered, describe_error};
+use output::{Archived, DocumentItem, DocumentWithHtml, ProjectItem, Registered, describe_error};
 use params::{
     CreateDocumentParams, DocumentParams, GetDocumentParams, ProjectParams, UpdateDocumentParams,
 };
@@ -45,6 +48,7 @@ pub struct McpApp {
     pub read_revision: ReadRevisionContent,
     pub create_document: CreateDocument,
     pub add_revision: AddRevision,
+    pub archive_document: ArchiveDocument,
     pub app_url: AppUrl,
 }
 
@@ -285,6 +289,29 @@ impl GalleyMcp {
                 &self.app.app_url,
                 request_host(&ctx).as_deref(),
             )),
+            Err(err) => tool_error(&err),
+        }
+    }
+
+    // 更新者名（X-Author-Name）は求めない。アーカイブは版を作らず、記録する項目が無いため
+    #[tool(
+        description = "資料をアーカイブする。アーカイブした資料は一覧に出なくなるが、資料と版の履歴は残り、人が Galley の画面（アーカイブ）から戻せる。MCP からは戻せない。アーカイブしたプロジェクトの資料と、アーカイブ済みの資料はエラーになる"
+    )]
+    async fn archive_document(&self, Parameters(params): Parameters<DocumentParams>) -> ToolResult {
+        let DocumentParams { project, document } = params;
+        let result = async {
+            let project = self.app.find_project.execute(&project).await?;
+            let document = self
+                .app
+                .find_document
+                .execute(project.id, &document)
+                .await?;
+            let archived = self.app.archive_document.execute(document.id).await?;
+            Ok::<_, AppError>((project, archived))
+        }
+        .await;
+        match result {
+            Ok((project, document)) => json(&Archived::new(&project, &document)),
             Err(err) => tool_error(&err),
         }
     }
