@@ -41,6 +41,8 @@ COPY --from=builder --chown=65532:65532 /out/data /data
 ENV GALLEY_DATA_DIR=/data \
     GALLEY_APP_ADDR=0.0.0.0:8080 \
     GALLEY_VIEWER_ADDR=0.0.0.0:8081
+# 管理用のサブコマンドを docker exec galley galley purge ... で呼べるようにする（シェルが無いので PATH で探させる）
+ENV PATH=/app:${PATH}
 
 # SQLite（galley.db）と資料の実体（blobs/）
 VOLUME ["/data"]
