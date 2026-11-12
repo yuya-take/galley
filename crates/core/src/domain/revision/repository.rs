@@ -2,6 +2,7 @@ use async_trait::async_trait;
 
 use super::{Revision, RevisionNumber};
 use crate::domain::{
+    blob::BlobHash,
     error::RepositoryError,
     shared::{DocumentId, RevisionId},
 };
@@ -24,5 +25,12 @@ pub trait RevisionRepository: Send + Sync {
         &self,
         document_id: DocumentId,
         limit: Option<u32>,
+    ) -> Result<Vec<Revision>, RepositoryError>;
+
+    /// `hashes` のどれかのブロブを使っている版を、資料をまたいですべて返す（物理削除で、ブロブを
+    /// 消してよいかを確かめるのに使う）。
+    async fn list_by_blob_hashes(
+        &self,
+        hashes: &[BlobHash],
     ) -> Result<Vec<Revision>, RepositoryError>;
 }

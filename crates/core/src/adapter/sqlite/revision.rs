@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 
 use crate::domain::{
+    blob::BlobHash,
     error::RepositoryError,
     revision::{Revision, RevisionNumber, RevisionRepository},
     shared::{DocumentId, RevisionId},
@@ -61,6 +62,28 @@ impl RevisionRepository for ToastyRevisionRepository {
             query = query.limit(limit as usize);
         }
         query
+            .exec(&mut db)
+            .await
+            .map_err(backend_error)?
+            .into_iter()
+            .map(Revision::try_from)
+            .collect()
+    }
+
+    /// blob_hash に索引は無いので、版の表を順に読む。物理削除（管理用のコマンド）でしか使わず、
+    /// 版の行は多くないので、索引は足さない。
+    async fn list_by_blob_hashes(
+        &self,
+        hashes: &[BlobHash],
+    ) -> Result<Vec<Revision>, RepositoryError> {
+        if hashes.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut db = self.db.clone();
+        let hashes: Vec<String> = hashes.iter().map(|hash| hash.as_str().to_owned()).collect();
+        let fields = RevisionRecord::fields();
+        RevisionRecord::filter(fields.blob_hash().in_list(hashes))
+            .order_by(fields.number().desc())
             .exec(&mut db)
             .await
             .map_err(backend_error)?

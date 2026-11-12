@@ -1,5 +1,6 @@
 //! 資料。版（リビジョン）の積み重ねで、`current_revision_id` が「現在版」を指す。
 
+mod purge;
 mod query;
 mod repository;
 mod slug;
@@ -7,6 +8,7 @@ mod title;
 
 use jiff::Timestamp;
 
+pub use purge::{BlobDisposal, PurgedRevisions};
 pub use query::{DocumentOrder, DocumentQuery};
 pub use repository::DocumentRepository;
 pub use slug::{DocumentSlug, RESERVED_DOCUMENT_SLUGS};
@@ -30,6 +32,10 @@ pub enum DocumentError {
     /// 渡された版が、この資料の現在版や版ではない（呼び出し側の誤り）。
     #[error("ほかの資料の版です")]
     RevisionMismatch,
+    #[error(
+        "第{0}版は最新の版なので、版だけでは消せません。新しい版を登録するか、ほかの版に戻してから消してください（資料ごと消すときは版を指定しません）"
+    )]
+    PurgeLatest(RevisionNumber),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,6 +163,20 @@ impl Document {
         )?;
         revision.restored_from = Some(target.number);
         Ok(revision)
+    }
+
+    /// 版を物理削除できるか。最新の版（現在版）は消せない。
+    ///
+    /// 次の版の番号は現在版の番号 + 1 なので、最新の版を消して一つ前を現在版にすると、次に登録した版が
+    /// 消した番号を使い直してしまう。最新の版を残せば番号は使い直されず、消した番号は欠番になる。
+    pub fn ensure_can_purge_revision(&self, revision: &Revision) -> Result<(), DocumentError> {
+        if revision.document_id != self.id {
+            return Err(DocumentError::RevisionMismatch);
+        }
+        if revision.id == self.current_revision_id {
+            return Err(DocumentError::PurgeLatest(revision.number));
+        }
+        Ok(())
     }
 
     pub fn rename(&mut self, title: DocumentTitle) {
@@ -347,6 +367,43 @@ mod tests {
             ),
             Err(DocumentError::RevisionMismatch)
         );
+    }
+
+    #[test]
+    fn purge_revision_rejects_latest_and_other_documents() {
+        let (mut document, first) = new_document();
+        assert_eq!(
+            document.ensure_can_purge_revision(&first),
+            Err(DocumentError::PurgeLatest(RevisionNumber::FIRST))
+        );
+        document
+            .add_revision(
+                &first,
+                second_revision(),
+                Timestamp::from_second(200).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(document.ensure_can_purge_revision(&first), Ok(()));
+
+        let (_, other) = new_document();
+        assert_eq!(
+            document.ensure_can_purge_revision(&other),
+            Err(DocumentError::RevisionMismatch)
+        );
+    }
+
+    #[test]
+    fn purge_revision_is_allowed_on_archived_document() {
+        let (mut document, first) = new_document();
+        document
+            .add_revision(
+                &first,
+                second_revision(),
+                Timestamp::from_second(200).unwrap(),
+            )
+            .unwrap();
+        document.archive(Timestamp::from_second(300).unwrap());
+        assert_eq!(document.ensure_can_purge_revision(&first), Ok(()));
     }
 
     #[test]

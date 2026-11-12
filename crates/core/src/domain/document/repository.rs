@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 
-use super::{Document, DocumentListItem, DocumentQuery, DocumentSlug};
+use super::{Document, DocumentListItem, DocumentQuery, DocumentSlug, PurgedRevisions};
 use crate::domain::{
     blob::Blob,
     error::RepositoryError,
     project::Project,
     revision::Revision,
-    shared::{DocumentId, ProjectId},
+    shared::{DocumentId, ProjectId, RevisionId},
 };
 
 /// 資料の永続化。実装は `adapter`。
@@ -59,4 +59,14 @@ pub trait DocumentRepository: Send + Sync {
     ) -> Result<Vec<DocumentSlug>, RepositoryError>;
 
     async fn list(&self, query: &DocumentQuery) -> Result<Vec<DocumentListItem>, RepositoryError>;
+
+    /// 資料を物理削除する。資料とそのすべての版を1トランザクションで消し、消した版のブロブのうち、
+    /// どの版からも参照されなくなったものの情報も消す。ストレージの実体は消さない（呼び出し側が、
+    /// コミットのあとに消す）。資料が無ければ何も消さない。
+    async fn purge(&self, id: DocumentId) -> Result<PurgedRevisions, RepositoryError>;
+
+    /// 版を1つ物理削除する。版の番号は詰めない（欠番になる）。ブロブの扱いは [`Self::purge`] と同じ。
+    /// 最新の版でないことは、呼び出し側が [`Document::ensure_can_purge_revision`] で確かめる。
+    /// 版が無ければ何も消さない。
+    async fn purge_revision(&self, id: RevisionId) -> Result<PurgedRevisions, RepositoryError>;
 }

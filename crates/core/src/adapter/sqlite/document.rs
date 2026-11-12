@@ -3,15 +3,15 @@ use toasty::stmt::{Type, Value};
 use toasty_core::driver::operation::TransactionMode;
 
 use crate::domain::{
-    blob::Blob,
+    blob::{Blob, BlobHash},
     document::{
         Document, DocumentListItem, DocumentOrder, DocumentQuery, DocumentRepository, DocumentSlug,
-        DocumentTitle,
+        DocumentTitle, PurgedRevisions,
     },
     error::RepositoryError,
     project::{CrestColor, Project, ProjectName, ProjectSlug},
     revision::{AuthorName, Revision, RevisionMessage, RevisionNumber},
-    shared::{ArchiveFilter, DocumentId, ProjectId},
+    shared::{ArchiveFilter, DocumentId, ProjectId, RevisionId},
 };
 
 use super::{
@@ -86,6 +86,45 @@ async fn insert_revision_record(
         .await
         .map_err(backend_error)?;
     Ok(())
+}
+
+/// 消した版の番号を集め、消した版のブロブのうち、どの版からも参照されなくなったものの情報を消す。
+/// 版を消したあと、同じトランザクションの中で呼ぶ。
+async fn delete_unreferenced_blobs(
+    tx: &mut toasty::Transaction<'_>,
+    deleted: Vec<RevisionRecord>,
+) -> Result<PurgedRevisions, RepositoryError> {
+    let mut purged = PurgedRevisions::default();
+    let mut hashes: Vec<String> = Vec::new();
+    for record in deleted {
+        purged.numbers.push(
+            RevisionNumber::new(record.number).map_err(|e| corrupted("revisions.number", e))?,
+        );
+        if !hashes.contains(&record.blob_hash) {
+            hashes.push(record.blob_hash);
+        }
+    }
+    let fields = RevisionRecord::fields();
+    for hash in hashes {
+        let is_used = RevisionRecord::filter(fields.blob_hash().eq(hash.as_str()))
+            .first()
+            .exec(tx)
+            .await
+            .map_err(backend_error)?
+            .is_some();
+        if is_used {
+            continue;
+        }
+        BlobRecord::filter_by_hash(hash.as_str())
+            .delete()
+            .exec(tx)
+            .await
+            .map_err(backend_error)?;
+        purged
+            .unreferenced_blobs
+            .push(BlobHash::parse(&hash).map_err(|e| corrupted("revisions.blob_hash", e))?);
+    }
+    Ok(purged)
 }
 
 #[async_trait]
@@ -232,6 +271,51 @@ impl DocumentRepository for ToastyDocumentRepository {
         let mut db = self.db.clone();
         let rows = list_sql(query).exec(&mut db).await.map_err(backend_error)?;
         rows.into_iter().map(list_item).collect()
+    }
+
+    async fn purge(&self, id: DocumentId) -> Result<PurgedRevisions, RepositoryError> {
+        let _write = self.writes.acquire().await;
+        let mut db = self.db.clone();
+        let mut tx = begin_write(&mut db).await?;
+        let fields = RevisionRecord::fields();
+        // 計画を見せたあとに足された版も、資料と一緒に消す
+        let revisions = RevisionRecord::filter(fields.document_id().eq(id.as_uuid()))
+            .order_by(fields.number().desc())
+            .exec(&mut tx)
+            .await
+            .map_err(backend_error)?;
+        RevisionRecord::filter(fields.document_id().eq(id.as_uuid()))
+            .delete()
+            .exec(&mut tx)
+            .await
+            .map_err(backend_error)?;
+        DocumentRecord::filter_by_id(id.as_uuid())
+            .delete()
+            .exec(&mut tx)
+            .await
+            .map_err(backend_error)?;
+        let purged = delete_unreferenced_blobs(&mut tx, revisions).await?;
+        tx.commit().await.map_err(backend_error)?;
+        Ok(purged)
+    }
+
+    async fn purge_revision(&self, id: RevisionId) -> Result<PurgedRevisions, RepositoryError> {
+        let _write = self.writes.acquire().await;
+        let mut db = self.db.clone();
+        let mut tx = begin_write(&mut db).await?;
+        let revision = RevisionRecord::filter_by_id(id.as_uuid())
+            .first()
+            .exec(&mut tx)
+            .await
+            .map_err(backend_error)?;
+        RevisionRecord::filter_by_id(id.as_uuid())
+            .delete()
+            .exec(&mut tx)
+            .await
+            .map_err(backend_error)?;
+        let purged = delete_unreferenced_blobs(&mut tx, revision.into_iter().collect()).await?;
+        tx.commit().await.map_err(backend_error)?;
+        Ok(purged)
     }
 }
 

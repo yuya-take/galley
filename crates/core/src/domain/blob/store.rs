@@ -13,4 +13,7 @@ pub trait BlobStore: Send + Sync {
     ///
     /// 読んだ内容のハッシュが一致しないときは [`StorageError::Corrupted`] を返す。
     async fn get(&self, hash: &BlobHash) -> Result<Option<BlobContent>, StorageError>;
+
+    /// 実体を消す（資料の物理削除）。無ければ何もしない。
+    async fn delete(&self, hash: &BlobHash) -> Result<(), StorageError>;
 }
