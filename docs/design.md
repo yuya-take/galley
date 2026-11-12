@@ -349,9 +349,23 @@ sequenceDiagram
 
 | ルート | 内容 |
 | --- | --- |
-| `POST /api/upload/check` | HTML を検査し、`<title>` を返す。外部リソースがあれば 422 で該当箇所と AI への依頼文を返す |
-| `GET /api/upload/targets?project=&file_name=` | プロジェクトの資料と、ファイル名が一致した資料 |
-| `POST /api/upload` | 新しい資料、または既存の資料の新しい版として登録し、資料ビューアの URL（`?registered=<版の番号>` 付き）を返す。更新者名は Cookie から読む。アーカイブしたプロジェクト・資料には登録しない |
+| `POST /api/upload/check` | HTML を検査し、`<title>` を返す（`{"title"}`） |
+| `GET /api/upload/targets?project=&file_name=` | プロジェクトの資料と、ファイル名が一致した資料（`{"documents": [{"slug", "title", "revision_number"}], "suggested"}`） |
+| `POST /api/upload` | 新しい資料、または既存の資料の新しい版として登録する。更新者名は Cookie から読む。アーカイブしたプロジェクト・資料には登録しない。結果は MCP の登録の結果と同じ名前で返す（`{"project", "slug", "title", "revision_number", "url"}`。`url` は `?registered=<版の番号>` 付きの資料ビューアの URL） |
+
+失敗したときは `{"error": {"code", "message", "details"}}` を返す。`message` は画面にそのまま出す文言。ボディの上限を超えたときや JSON として読めないときも、同じ形で返す。
+
+| code | 状態 | 場面 |
+| --- | --- | --- |
+| `external_resource` | 422 | 外部リソースを読み込んでいる。`details` に `total`、`resources`（`line`、`kind`、`code`）、`ai_request` |
+| `too_large` | 413 | HTML が上限を超える（ボディの上限を超えたときも） |
+| `invalid_html` | 422 | HTML が空、または UTF-8 ではない |
+| `invalid_input` | 422 | 資料名・変更メモなどが正しくない |
+| `author_required` | 422 | 更新者名（Cookie）が無い |
+| `not_found` | 404 | プロジェクト・資料が見つからない |
+| `archived` | 409 | アーカイブしたプロジェクト・資料 |
+| `bad_request` | 400 | リクエストの形が正しくない |
+| `internal` | 500 | DB・ストレージの失敗 |
 
 ### 空のプロジェクトと AI 接続の案内
 
