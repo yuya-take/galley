@@ -19,12 +19,12 @@
     const input = dialog.querySelector("input[name=author]");
     const error = dialog.querySelector("[data-error]");
 
-    document.querySelectorAll("[data-action=change-author]").forEach((button) => {
-      button.addEventListener("click", () => {
-        error.hidden = true;
-        dialog.showModal();
-        input.select();
-      });
+    // 版の履歴のプレビュー欄はサーバーで描き直すとボタンが入れ替わるので、document で受ける
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest("[data-action=change-author]")) return;
+      error.hidden = true;
+      dialog.showModal();
+      input.select();
     });
 
     dialog.querySelector("[data-action=cancel]").addEventListener("click", () => dialog.close());
