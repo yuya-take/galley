@@ -19,7 +19,7 @@ use galley_core::{
         project::{Project, ProjectError},
         revision::{Revision, RevisionNumber, RevisionRepository, RevisionSource},
         shared::DocumentId,
-        upload::UploadError,
+        upload::{HtmlSizeLimit, UploadError},
     },
 };
 
@@ -77,18 +77,28 @@ impl Fixture {
     }
 
     fn create_document(&self) -> CreateDocument {
+        self.create_document_with_limit(HtmlSizeLimit::DEFAULT)
+    }
+
+    fn create_document_with_limit(&self, limit: HtmlSizeLimit) -> CreateDocument {
         CreateDocument::new(
             Arc::new(self.database.projects()),
             Arc::new(self.database.documents()),
             self.blobs.clone(),
+            limit,
         )
     }
 
     fn add_revision(&self) -> AddRevision {
+        self.add_revision_with_limit(HtmlSizeLimit::DEFAULT)
+    }
+
+    fn add_revision_with_limit(&self, limit: HtmlSizeLimit) -> AddRevision {
         AddRevision::new(
             Arc::new(self.database.documents()),
             Arc::new(self.database.revisions()),
             self.blobs.clone(),
+            limit,
         )
     }
 
@@ -222,6 +232,47 @@ async fn rejected_html_is_not_stored() -> TestResult {
             .await?
             .is_empty()
     );
+    Ok(())
+}
+
+/// 起動時に設定した上限で、新しい資料も新しい版も断る。
+#[tokio::test]
+async fn configured_size_limit_is_applied() -> TestResult {
+    let fx = Fixture::new().await?;
+    let limit = HtmlSizeLimit::from_bytes(V1.len())?;
+    let larger = format!("{V1}。");
+    let too_large = |result: &Result<RegisteredRevision, AppError>| {
+        matches!(
+            result,
+            Err(AppError::InvalidUpload(UploadError::TooLarge { size, max }))
+                if *size == larger.len() && *max == V1.len()
+        )
+    };
+
+    let new_document = CreateDocumentInput {
+        project_id: fx.project.id,
+        title: None,
+        slug: SlugSource::None,
+        revision: input(&larger, "初版", "佐藤"),
+    };
+    let result = fx
+        .create_document_with_limit(limit)
+        .execute(new_document.clone())
+        .await;
+    assert!(too_large(&result), "{result:?}");
+    // 既定の上限なら登録できる
+    let created = fx.create_document().execute(new_document).await?;
+
+    let added = fx
+        .add_revision_with_limit(limit)
+        .execute(created.document.id, input(V1, "", "田中"))
+        .await?;
+    assert_eq!(added.revision.number.get(), 2);
+    let result = fx
+        .add_revision_with_limit(limit)
+        .execute(created.document.id, input(&larger, "", "田中"))
+        .await;
+    assert!(too_large(&result), "{result:?}");
     Ok(())
 }
 

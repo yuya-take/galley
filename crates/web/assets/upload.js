@@ -25,12 +25,14 @@
     element instanceof HTMLElement &&
     (element.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName));
 
-  // 「24.5 KB」「10MB」（1KB = 1024 バイト。サーバーの文言と揃える）
-  const formatSize = (bytes) => {
-    const round = (value) => String(Math.round(value * 10) / 10);
+  // 「24.5 KB」「10MB」（1KB = 1024 バイト。サーバーの文言と揃える）。小数1桁への丸め方は `rounding` で選ぶ。
+  // 上限と比べて断るときは、ファイルの大きさを切り上げ（Math.ceil）、上限を切り捨てる（Math.floor）。
+  // 上限をわずかに超えただけでも「10.1MB。上限は 10MB」のように、必ず上限より大きく見せるため。
+  const formatSize = (bytes, rounding = Math.round) => {
+    const tenths = (unit) => String(rounding((bytes * 10) / unit) / 10);
     if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${round(bytes / 1024)} KB`;
-    return `${round(bytes / 1024 / 1024)}MB`;
+    if (bytes < 1024 * 1024) return `${tenths(1024)} KB`;
+    return `${tenths(1024 * 1024)}MB`;
   };
   const byteLength = (text) => new TextEncoder().encode(text).length;
   const isHtmlFile = (file) => /\.html?$/i.test(file.name) || file.type === "text/html";
@@ -88,7 +90,7 @@
 
   // ---- サーバーとのやりとり ----
   const statusMessage = (status) => {
-    if (status === 413) return `HTML が大きすぎて送れません（上限は ${formatSize(MAX_BYTES)}）`;
+    if (status === 413) return `HTML が大きすぎて送れません（上限は ${formatSize(MAX_BYTES, Math.floor)}）`;
     if (status === 403) return "このリクエストは受け付けられません。画面を読み込み直してください";
     return "登録できませんでした。時間をおいて、もう一度試してください";
   };
@@ -143,7 +145,9 @@
   const readFile = async (file) => {
     if (!isHtmlFile(file)) return { error: "HTML ファイル（.html）を選んでください" };
     if (file.size > MAX_BYTES) {
-      return { error: `ファイルが大きすぎます（${formatSize(file.size)}。上限は ${formatSize(MAX_BYTES)}）` };
+      return {
+        error: `ファイルが大きすぎます（${formatSize(file.size, Math.ceil)}。上限は ${formatSize(MAX_BYTES, Math.floor)}）`,
+      };
     }
     try {
       const bytes = await file.arrayBuffer();

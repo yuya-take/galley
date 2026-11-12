@@ -1,13 +1,13 @@
 //! アップロード時の検査。すり抜けの書き方を含めて、外部リソースを見逃さないことを確かめる。
 
 use galley_core::domain::upload::{
-    ExternalResources, HtmlDocument, MAX_HTML_BYTES, REJECTION_REASON, ResourceKind, UploadError,
+    ExternalResources, HtmlDocument, HtmlSizeLimit, REJECTION_REASON, ResourceKind, UploadError,
 };
 
 use ResourceKind::{Embed, Font, Image, Media, Navigation, Other, Script, Stylesheet};
 
 fn parse(html: &str) -> Result<HtmlDocument, UploadError> {
-    HtmlDocument::parse(html.as_bytes().to_vec())
+    HtmlDocument::parse(html.as_bytes().to_vec(), HtmlSizeLimit::DEFAULT)
 }
 
 #[track_caller]
@@ -97,22 +97,42 @@ fn rejects_empty_file() {
 #[test]
 fn rejects_non_utf8() {
     let shift_jis = vec![0x82, 0xa0, 0x82, 0xa2];
-    assert_eq!(HtmlDocument::parse(shift_jis), Err(UploadError::NotUtf8));
+    assert_eq!(
+        HtmlDocument::parse(shift_jis, HtmlSizeLimit::DEFAULT),
+        Err(UploadError::NotUtf8)
+    );
 }
 
 #[test]
 fn rejects_too_large_file() {
-    let html = vec![b' '; MAX_HTML_BYTES + 1];
+    let max = HtmlSizeLimit::DEFAULT.bytes();
+    assert_eq!(max, 10 * 1024 * 1024);
     assert_eq!(
-        HtmlDocument::parse(html),
-        Err(UploadError::TooLarge {
-            size: MAX_HTML_BYTES + 1,
-            max: MAX_HTML_BYTES
-        })
+        HtmlDocument::parse(vec![b' '; max + 1], HtmlSizeLimit::DEFAULT),
+        Err(UploadError::TooLarge { size: max + 1, max })
     );
     assert!(
-        HtmlDocument::parse(format!("<p>{}", " ".repeat(MAX_HTML_BYTES - 3)).into_bytes()).is_ok()
+        HtmlDocument::parse(
+            format!("<p>{}", " ".repeat(max - 3)).into_bytes(),
+            HtmlSizeLimit::DEFAULT
+        )
+        .is_ok()
     );
+}
+
+#[test]
+fn applies_configured_size_limit() -> Result<(), Box<dyn std::error::Error>> {
+    let limit = HtmlSizeLimit::parse("1KB")?;
+    let fits = format!("<p>{}", "a".repeat(1024 - 3));
+    assert!(HtmlDocument::parse(fits.clone().into_bytes(), limit).is_ok());
+    assert_eq!(
+        HtmlDocument::parse(format!("{fits}a").into_bytes(), limit),
+        Err(UploadError::TooLarge {
+            size: 1025,
+            max: 1024
+        })
+    );
+    Ok(())
 }
 
 // ---- 要素の属性 ----

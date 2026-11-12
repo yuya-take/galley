@@ -31,8 +31,8 @@ FROM gcr.io/distroless/cc-debian13:nonroot
 
 LABEL org.opencontainers.image.title="Galley" \
       org.opencontainers.image.description="AI が生成した HTML 資料を保存・閲覧・バージョン管理するセルフホスト型の Web アプリ" \
-      org.opencontainers.image.source="https://github.com/yuya-take/galley" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.source="https://github.com/yuya-take/galley-docs" \
+      org.opencontainers.image.licenses="MIT OR Apache-2.0"
 
 # 画面のアセット（assets/）は実行ファイルの隣から読み込む
 COPY --from=builder /out/app /app

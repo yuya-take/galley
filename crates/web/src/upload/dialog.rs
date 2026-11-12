@@ -6,7 +6,7 @@ use galley_core::domain::{
     document::{DOCUMENT_TITLE_MAX_CHARS, UNTITLED_DOCUMENT},
     project::ProjectSummary,
     revision::{AUTHOR_NAME_MAX_CHARS, REVISION_MESSAGE_MAX_CHARS},
-    upload::MAX_HTML_BYTES,
+    upload::HtmlSizeLimit,
 };
 use topcoat::{
     Result,
@@ -14,15 +14,16 @@ use topcoat::{
 };
 
 /// 登録の画面一式。`projects` は登録先に選べるプロジェクト（アーカイブしたものを除く）、
-/// `author` はブラウザに保存した更新者名。
+/// `author` はブラウザに保存した更新者名、`size_limit` は1ファイルのサイズ上限。
 #[component]
 pub async fn upload_dialogs<'a>(
     projects: &'a [ProjectSummary],
     author: Option<&'a str>,
+    size_limit: HtmlSizeLimit,
 ) -> Result<impl View> {
     Ok(view! {
         drop_overlay()
-        register_dialog(projects: projects, author: author)
+        register_dialog(projects: projects, author: author, size_limit: size_limit)
         rejected_dialog()
     })
 }
@@ -48,13 +49,14 @@ async fn drop_overlay() -> Result<impl View> {
 async fn register_dialog<'a>(
     projects: &'a [ProjectSummary],
     author: Option<&'a str>,
+    size_limit: HtmlSizeLimit,
 ) -> Result<impl View> {
     Ok(view! {
         <dialog
             id="upload-dialog"
             class="dialog upload-dialog"
             aria-labelledby="upload-dialog-title"
-            data-max-bytes=(MAX_HTML_BYTES.to_string())
+            data-max-bytes=(size_limit.bytes().to_string())
         >
             <form method="dialog" class="dialog-body" novalidate="">
                 <div class="upload-head">

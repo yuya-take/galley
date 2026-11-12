@@ -32,6 +32,7 @@ use galley_core::{
         },
         revision::{AddRevision, ListRevisions, ReadRevisionContent, RevertToRevision},
     },
+    domain::upload::HtmlSizeLimit,
 };
 use galley_web::{AppUrl, ViewerUrl};
 use tokio::net::TcpListener;
@@ -74,6 +75,8 @@ async fn main() -> anyhow::Result<()> {
 
     let app_url = app_url_from_env()?;
     tracing::info!("app url: {app_url}");
+    let html_size_limit = html_size_limit_from_env()?;
+    tracing::info!("max html size: {html_size_limit}");
 
     let projects = Arc::new(database.projects());
     let documents = Arc::new(database.documents());
@@ -92,15 +95,22 @@ async fn main() -> anyhow::Result<()> {
             documents.clone(),
             Arc::new(database.revisions()),
         ),
-        create_document: CreateDocument::new(projects, documents.clone(), blobs.clone()),
+        create_document: CreateDocument::new(
+            projects,
+            documents.clone(),
+            blobs.clone(),
+            html_size_limit,
+        ),
         add_revision: AddRevision::new(
             documents.clone(),
             Arc::new(database.revisions()),
             blobs.clone(),
+            html_size_limit,
         ),
         find_document_by_file_name: FindDocumentByFileName::new(documents),
         viewer_url,
         app_url: app_url.clone(),
+        html_size_limit,
     }))?;
     let mcp_token = Arc::new(guard::McpToken::from_env(std::env::var("MCP_TOKEN").ok()));
     if mcp_token.is_required() {
@@ -116,9 +126,11 @@ async fn main() -> anyhow::Result<()> {
                 blobs: blobs.clone(),
             },
             app_url,
+            html_size_limit,
         ),
         &allowed_hosts,
         mcp_token,
+        html_size_limit,
     );
     let viewer = viewer::router(
         Arc::new(viewer::ViewerApp {
@@ -211,6 +223,15 @@ fn app_url_from_env() -> anyhow::Result<AppUrl> {
     match std::env::var("GALLEY_APP_URL") {
         Ok(url) if !url.is_empty() => Ok(AppUrl::parse(&url)?),
         _ => Ok(AppUrl::FromRequest),
+    }
+}
+
+/// 1ファイルのサイズ上限。`GALLEY_MAX_HTML_SIZE`（「20MB」「512KB」）が無ければ 10MB。
+fn html_size_limit_from_env() -> anyhow::Result<HtmlSizeLimit> {
+    match std::env::var("GALLEY_MAX_HTML_SIZE") {
+        Ok(value) if !value.is_empty() => HtmlSizeLimit::parse(&value)
+            .with_context(|| format!("GALLEY_MAX_HTML_SIZE「{value}」は使えません")),
+        _ => Ok(HtmlSizeLimit::DEFAULT),
     }
 }
 
