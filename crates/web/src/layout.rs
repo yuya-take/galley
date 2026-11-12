@@ -12,7 +12,7 @@ use topcoat::{
     view::{View, error_boundary, view},
 };
 
-use crate::{WebApp, author, fonts, sidebar::sidebar};
+use crate::{WebApp, author, fonts, search::search_dialog, sidebar::sidebar};
 
 const APP_CSS: Asset = asset!("assets/app.css");
 const APP_JS: Asset = asset!("assets/app.js");
@@ -62,6 +62,7 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                     </main>
                 </div>
                 author_dialog(author: author.as_ref().map(|a| a.as_str()))
+                search_dialog()
             </body>
         </html>
     })
