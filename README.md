@@ -159,6 +159,10 @@ claude mcp add --transport http galley http://galley.example.com:8080/mcp \
 
 Rust（[Axum](https://github.com/tokio-rs/axum)、[Topcoat](https://github.com/tokio-rs/topcoat)、[rmcp](https://crates.io/crates/rmcp)、[Toasty](https://github.com/tokio-rs/toasty)）、SQLite
 
+## 貢献
+
+Issue や PR を歓迎します。手順は [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。脆弱性は公開の Issue にせず、[SECURITY.md](SECURITY.md) の手順で報告してください。
+
 ## ライセンス
 
 [MIT](LICENSE-MIT) と [Apache-2.0](LICENSE-APACHE) のデュアルライセンスです。使う人はどちらかを選べます。
