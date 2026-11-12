@@ -9,8 +9,8 @@
 //! POST はサーバーの CSRF 対策（同じオリジンの JSON の POST だけ通す）を通ってくる。更新者名は
 //! Cookie から読む（ダイアログの「更新者」は、送る前に `assets/upload.js` が Cookie に保存する）。
 //!
-//! 失敗したときは `{ "message": "…" }` を返す。外部リソースを読み込んでいて断ったときは、
-//! 該当箇所と AI への依頼文を `external` に添える。
+//! 失敗したときは `{"error": {"code": "…", "message": "…"}}` を返す。外部リソースを読み込んでいて
+//! 断ったとき（`external_resource`）は、該当箇所と AI への依頼文を `details` に添える。
 
 use std::sync::Arc;
 
@@ -21,11 +21,11 @@ use galley_core::{
         revision::{RegisteredRevision, RevisionInput},
     },
     domain::{
-        document::{DocumentListItem, DocumentQuery},
-        project::Project,
+        document::{DocumentError, DocumentListItem, DocumentQuery},
+        project::{Project, ProjectError},
         revision::{AuthorName, RevisionSource},
         shared::ArchiveFilter,
-        upload::{ExternalResources, HtmlDocument, UploadError},
+        upload::{ExternalResources, HtmlDocument, MAX_HTML_BYTES, UploadError},
     },
 };
 use http::StatusCode;
@@ -34,8 +34,10 @@ use topcoat::{
     Result,
     context::{Cx, app_context},
     router::{
+        Body, Next,
         content::Json,
-        query_params, request,
+        error::{BadRequestError, ContentTooLargeError},
+        layer, query_params, request,
         response::{IntoResponse, Response},
         route,
     },
@@ -120,14 +122,22 @@ enum Target {
     Revision { document: String },
 }
 
-/// 登録した資料を開く URL。
+/// 登録した資料と版。名前は MCP の登録の結果（`Registered`）と揃える。
 #[derive(Debug, PartialEq, Eq, Serialize)]
 struct RegisterResponse {
+    /// プロジェクトの slug。
+    project: String,
+    /// 資料の slug（新しい資料なら、決まった slug）。
+    slug: String,
+    /// 資料名。
+    title: String,
+    /// 登録した版の番号。
+    revision_number: u32,
     /// 資料ビューアの URL（`/<プロジェクト>/<資料>?registered=<版の番号>`）。開くと登録直後の通知が出る。
     url: String,
 }
 
-/// 失敗したときの応答。
+/// 失敗したときの応答。本文は `{"error": {"code", "message", "details"}}`。
 #[derive(Debug, PartialEq, Eq)]
 struct ApiError {
     status: StatusCode,
@@ -136,25 +146,55 @@ struct ApiError {
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 struct ErrorBody {
+    error: ErrorDetail,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize)]
+struct ErrorDetail {
+    code: ErrorCode,
     /// 画面に出す文言。
     message: String,
     /// 外部リソースを読み込んでいて断ったときの、該当箇所と AI への依頼文。
     #[serde(skip_serializing_if = "Option::is_none")]
-    external: Option<ExternalBody>,
+    details: Option<ExternalDetails>,
+}
+
+/// 失敗の種類。画面はこれで出し分ける（`external_resource` なら登録できない資料のダイアログ）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum ErrorCode {
+    /// 外部リソースを読み込んでいる。
+    ExternalResource,
+    /// HTML が大きすぎる（ボディの上限を超えたときも）。
+    TooLarge,
+    /// HTML が空、または UTF-8 ではない。
+    InvalidHtml,
+    /// 資料名・変更メモ・更新者名などが正しくない。
+    InvalidInput,
+    /// 更新者名（Cookie）が無い。
+    AuthorRequired,
+    /// プロジェクト・資料が見つからない。
+    NotFound,
+    /// アーカイブしたプロジェクト・資料には登録できない。
+    Archived,
+    /// リクエストの形が正しくない。
+    BadRequest,
+    /// サーバーの中の失敗（DB・ストレージ）。
+    Internal,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
-struct ExternalBody {
+struct ExternalDetails {
     /// 見つかった件数（`resources` に載せきれなかったものも数える）。
     total: usize,
     /// 該当箇所（行番号の順）。
-    resources: Vec<ResourceBody>,
+    resources: Vec<ResourceDetail>,
     /// 資料を作った AI に送る、作り直しの依頼文。
     ai_request: String,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
-struct ResourceBody {
+struct ResourceDetail {
     line: usize,
     /// 種類（「スクリプト」など、画面に出す言葉）。
     kind: &'static str,
@@ -162,14 +202,14 @@ struct ResourceBody {
     code: String,
 }
 
-impl From<&ExternalResources> for ExternalBody {
+impl From<&ExternalResources> for ExternalDetails {
     fn from(resources: &ExternalResources) -> Self {
         Self {
             total: resources.total(),
             resources: resources
                 .resources()
                 .iter()
-                .map(|resource| ResourceBody {
+                .map(|resource| ResourceDetail {
                     line: resource.line,
                     kind: resource.kind.label(),
                     code: resource.code.clone(),
@@ -181,12 +221,15 @@ impl From<&ExternalResources> for ExternalBody {
 }
 
 impl ApiError {
-    fn new(status: StatusCode, message: impl Into<String>) -> Self {
+    fn new(status: StatusCode, code: ErrorCode, message: impl Into<String>) -> Self {
         Self {
             status,
             body: ErrorBody {
-                message: message.into(),
-                external: None,
+                error: ErrorDetail {
+                    code,
+                    message: message.into(),
+                    details: None,
+                },
             },
         }
     }
@@ -194,44 +237,56 @@ impl ApiError {
 
 impl From<UploadError> for ApiError {
     fn from(error: UploadError) -> Self {
-        let message = match &error {
-            UploadError::Empty => "HTML が空です".to_owned(),
-            UploadError::TooLarge { size, max } => format!(
-                "HTML が大きすぎます（{}。上限は {}）",
-                megabytes(*size),
-                megabytes(*max)
+        match error {
+            UploadError::Empty => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                ErrorCode::InvalidHtml,
+                "HTML が空です",
             ),
-            UploadError::NotUtf8 => "UTF-8 で保存した HTML を選んでください".to_owned(),
-            UploadError::ExternalResources(_) => {
-                "外部のファイルを読み込んでいるため、登録できません".to_owned()
+            UploadError::TooLarge { size, max } => Self::new(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ErrorCode::TooLarge,
+                format!(
+                    "HTML が大きすぎます（{}。上限は {}）",
+                    megabytes(size),
+                    megabytes(max)
+                ),
+            ),
+            UploadError::NotUtf8 => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                ErrorCode::InvalidHtml,
+                "UTF-8 で保存した HTML を選んでください",
+            ),
+            UploadError::ExternalResources(resources) => {
+                let mut error = Self::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    ErrorCode::ExternalResource,
+                    "外部のファイルを読み込んでいるため、登録できません",
+                );
+                error.body.error.details = Some(ExternalDetails::from(&resources));
+                error
             }
-        };
-        let external = match &error {
-            UploadError::ExternalResources(resources) => Some(ExternalBody::from(resources)),
-            UploadError::Empty | UploadError::TooLarge { .. } | UploadError::NotUtf8 => None,
-        };
-        Self {
-            status: StatusCode::UNPROCESSABLE_ENTITY,
-            body: ErrorBody { message, external },
         }
     }
 }
 
 impl From<AppError> for ApiError {
     fn from(error: AppError) -> Self {
+        let message = error.to_string();
         match error {
             AppError::InvalidUpload(error) => error.into(),
             AppError::ProjectNotFound | AppError::DocumentNotFound | AppError::RevisionNotFound => {
-                Self::new(StatusCode::NOT_FOUND, error.to_string())
+                Self::new(StatusCode::NOT_FOUND, ErrorCode::NotFound, message)
             }
-            // アーカイブしたプロジェクト・資料には登録できない
-            AppError::Project(_) | AppError::Document(_) => {
-                Self::new(StatusCode::CONFLICT, error.to_string())
+            AppError::Project(ProjectError::Archived)
+            | AppError::Document(DocumentError::Archived) => {
+                Self::new(StatusCode::CONFLICT, ErrorCode::Archived, message)
             }
             AppError::Repository(_) | AppError::Storage(_) => {
                 tracing::error!(%error, "資料を登録できませんでした");
                 Self::new(
                     StatusCode::INTERNAL_SERVER_ERROR,
+                    ErrorCode::Internal,
                     "登録できませんでした。時間をおいて、もう一度試してください",
                 )
             }
@@ -240,9 +295,14 @@ impl From<AppError> for ApiError {
             AppError::InvalidText(_)
             | AppError::InvalidSlug(_)
             | AppError::InvalidCrestColor(_)
-            | AppError::ProjectSlugTaken(_) => {
-                Self::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string())
-            }
+            | AppError::ProjectSlugTaken(_)
+            | AppError::Document(
+                DocumentError::AlreadyLatest(_) | DocumentError::RevisionMismatch,
+            ) => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                ErrorCode::InvalidInput,
+                message,
+            ),
         }
     }
 }
@@ -266,6 +326,34 @@ fn respond<T: Serialize>(cx: &Cx, result: Result<T, ApiError>) -> Result<Respons
     }
 }
 
+/// Topcoat が本文を読む前に返すエラー（ボディの上限を超えた、JSON として読めない）も、
+/// ほかのエラーと同じ形の JSON にする。
+#[layer("/api/upload")]
+pub async fn json_errors(cx: &Cx, body: Body, next: Next<'_>) -> Result<Response> {
+    match next.run(cx, body).await {
+        Err(error) if error.downcast_ref::<ContentTooLargeError>().is_some() => respond::<()>(
+            cx,
+            Err(ApiError::new(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ErrorCode::TooLarge,
+                format!(
+                    "HTML が大きすぎて送れません（上限は {}）",
+                    megabytes(MAX_HTML_BYTES)
+                ),
+            )),
+        ),
+        Err(error) if error.downcast_ref::<BadRequestError>().is_some() => respond::<()>(
+            cx,
+            Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::BadRequest,
+                "リクエストの形が正しくありません。画面を読み込み直してください",
+            )),
+        ),
+        result => result,
+    }
+}
+
 /// HTML を検査する。外部リソースを読み込んでいれば、該当箇所と AI への依頼文を返す。
 #[route(POST "/api/upload/check")]
 pub async fn check_upload(cx: &Cx, Json(input): Json<CheckRequest>) -> Result<Response> {
@@ -280,9 +368,10 @@ pub async fn upload_targets(cx: &Cx) -> Result<Response> {
         Ok(TargetsQuery {
             project: Some(project),
             file_name,
-        }) => targets(app, project, file_name.as_deref()).await,
+        }) if !project.is_empty() => targets(app, project, file_name.as_deref()).await,
         _ => Err(ApiError::new(
             StatusCode::BAD_REQUEST,
+            ErrorCode::BadRequest,
             "プロジェクトを指定してください",
         )),
     };
@@ -347,6 +436,7 @@ async fn register(
     let author = author.ok_or_else(|| {
         ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::AuthorRequired,
             "登録する前に、あなたの名前を設定してください",
         )
     })?;
@@ -363,8 +453,8 @@ async fn register(
             app.create_document
                 .execute(CreateDocumentInput {
                     project_id: project.id,
-                    // 空なら指定しなかったことにする（HTML の <title> を使う）
-                    title: Some(title).filter(|title| !title.trim().is_empty()),
+                    // 空なら HTML の <title> を使う（DocumentTitle::for_new_document）
+                    title: Some(title),
                     slug: input
                         .file_name
                         .map_or(SlugSource::None, SlugSource::FileName),
@@ -379,6 +469,10 @@ async fn register(
         }
     };
     Ok(RegisterResponse {
+        project: project.slug.to_string(),
+        slug: document.slug.to_string(),
+        title: document.title.to_string(),
+        revision_number: revision.number.get(),
         url: registered_path(&project.slug, &document.slug, revision.number),
     })
 }
@@ -448,9 +542,10 @@ mod tests {
         assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(
             to_json(&error.body),
-            json!({
+            json!({ "error": {
+                "code": "external_resource",
                 "message": "外部のファイルを読み込んでいるため、登録できません",
-                "external": {
+                "details": {
                     "total": 1,
                     "resources": [{
                         "line": 3,
@@ -459,7 +554,7 @@ mod tests {
                     }],
                     "ai_request": "chart.js を外部から読み込まず、すべてを HTML の中に埋め込んだ、1ファイルで完結する HTML に作り直してください。",
                 },
-            })
+            }})
         );
         Ok(())
     }
@@ -467,13 +562,17 @@ mod tests {
     #[test]
     fn check_explains_other_problems() -> TestResult {
         let empty = check("  \n".to_owned()).err().ok_or("断られない")?;
-        assert_eq!(to_json(&empty.body), json!({ "message": "HTML が空です" }));
+        assert_eq!(
+            to_json(&empty.body),
+            json!({ "error": { "code": "invalid_html", "message": "HTML が空です" } })
+        );
         let large = check("a".repeat(MAX_HTML_BYTES + 1))
             .err()
             .ok_or("断られない")?;
-        assert_eq!(large.status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(large.status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(large.body.error.code, ErrorCode::TooLarge);
         assert_eq!(
-            large.body.message,
+            large.body.error.message,
             "HTML が大きすぎます（10 MB。上限は 10 MB）"
         );
         Ok(())
@@ -498,7 +597,7 @@ mod tests {
 
         let found = targets(&app, "sales", Some("plan.html"))
             .await
-            .map_err(|e| e.body.message)?;
+            .map_err(|e| e.body.error.message)?;
         assert_eq!(
             found,
             TargetsResponse {
@@ -518,7 +617,7 @@ mod tests {
         ] {
             let found = targets(&app, "sales", file_name)
                 .await
-                .map_err(|e| e.body.message)?;
+                .map_err(|e| e.body.error.message)?;
             assert_eq!(found.suggested, None, "{file_name:?}");
             assert_eq!(found.documents.len(), 1);
         }
@@ -566,7 +665,7 @@ mod tests {
             })),
         )
         .await
-        .map_err(|e| e.body.message)?;
+        .map_err(|e| e.body.error.message)?;
         assert_eq!(response.url, "/sales/q3-report?registered=1");
 
         let sales = app
@@ -605,7 +704,7 @@ mod tests {
             })),
         )
         .await
-        .map_err(|e| e.body.message)?;
+        .map_err(|e| e.body.error.message)?;
         assert!(
             response.url.starts_with("/sales/doc-") && response.url.ends_with("?registered=1"),
             "{}",
@@ -623,7 +722,7 @@ mod tests {
             })),
         )
         .await
-        .map_err(|e| e.body.message)?;
+        .map_err(|e| e.body.error.message)?;
         assert_eq!(response.url, "/sales/plan-2?registered=1");
         Ok(())
     }
@@ -643,8 +742,17 @@ mod tests {
             })),
         )
         .await
-        .map_err(|e| e.body.message)?;
-        assert_eq!(response.url, "/sales/plan?registered=3");
+        .map_err(|e| e.body.error.message)?;
+        assert_eq!(
+            to_json(&response),
+            json!({
+                "project": "sales",
+                "slug": "plan",
+                "title": "事業計画",
+                "revision_number": 3,
+                "url": "/sales/plan?registered=3",
+            })
+        );
         Ok(())
     }
 
@@ -662,7 +770,7 @@ mod tests {
             .ok_or("断られない")?;
         assert_eq!(no_author.status, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(
-            no_author.body.message,
+            no_author.body.error.message,
             "登録する前に、あなたの名前を設定してください"
         );
 
@@ -679,7 +787,10 @@ mod tests {
         .err()
         .ok_or("断られない")?;
         assert_eq!(external.status, StatusCode::UNPROCESSABLE_ENTITY);
-        assert_eq!(external.body.external.as_ref().map(|e| e.total), Some(1));
+        assert_eq!(
+            external.body.error.details.as_ref().map(|d| d.total),
+            Some(1)
+        );
         Ok(())
     }
 
@@ -698,7 +809,7 @@ mod tests {
             .err()
             .ok_or("断られない")?;
         assert_eq!(unknown.status, StatusCode::NOT_FOUND);
-        assert_eq!(unknown.body.message, "資料が見つかりません");
+        assert_eq!(unknown.body.error.message, "資料が見つかりません");
 
         // アーカイブした資料には版を追加しない
         let sales = app
@@ -736,9 +847,9 @@ mod tests {
                 .ok_or("断られない")?;
             assert_eq!(refused.status, StatusCode::CONFLICT);
             assert!(
-                refused.body.message.contains("アーカイブ"),
+                refused.body.error.message.contains("アーカイブ"),
                 "{}",
-                refused.body.message
+                refused.body.error.message
             );
         }
         Ok(())

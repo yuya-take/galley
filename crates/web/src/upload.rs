@@ -27,6 +27,7 @@ const API_PATH: &str = "/api/upload";
 pub fn routes(builder: RouterBuilder) -> RouterBuilder {
     builder
         .layer(BodyLimit::max(BODY_LIMIT).at(API_PATH))
+        .layer(api::json_errors)
         .route(api::check_upload)
         .route(api::upload_targets)
         .route(api::register_upload)
@@ -35,12 +36,13 @@ pub fn routes(builder: RouterBuilder) -> RouterBuilder {
 #[cfg(test)]
 mod tests {
     use http::{Request, StatusCode};
-    use serde_json::json;
-    use topcoat::router::{Body, Router};
+    use serde_json::{Value, json};
+    use topcoat::router::{Body, Router, to_bytes};
 
     use super::*;
 
-    async fn post_json(router: &Router, path: &str, body: Vec<u8>) -> StatusCode {
+    /// JSON を POST し、状態と本文（JSON でなければ `Value::Null`）を返す。
+    async fn post_json(router: &Router, path: &str, body: Vec<u8>) -> (StatusCode, Value) {
         let request = Request::builder()
             .method("POST")
             .uri(path)
@@ -48,7 +50,15 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(body))
             .unwrap_or_else(|e| panic!("{e}"));
-        router.handle(request).await.status()
+        let response = router.handle(request).await;
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|e| panic!("{e}"));
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
     }
 
     /// Topcoat の既定（2MiB）を超える HTML も、上限（10MB）までなら受け付ける。
@@ -58,14 +68,26 @@ mod tests {
         let html = format!("<p>{}</p>", "a".repeat(3 * 1024 * 1024));
         let body = serde_json::to_vec(&json!({ "html": html })).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(
-            post_json(&router, "/api/upload/check", body).await,
+            post_json(&router, "/api/upload/check", body).await.0,
             StatusCode::OK
         );
+    }
 
-        let too_large = vec![b' '; BODY_LIMIT + 1];
+    /// ボディの上限を超えたとき・JSON として読めないときも、ほかのエラーと同じ形の JSON で返す。
+    #[tokio::test]
+    async fn api_errors_before_handler_are_json() {
+        let router = routes(Router::builder()).build();
+        let (status, body) =
+            post_json(&router, "/api/upload/check", vec![b' '; BODY_LIMIT + 1]).await;
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(body["error"]["code"], "too_large");
         assert_eq!(
-            post_json(&router, "/api/upload/check", too_large).await,
-            StatusCode::PAYLOAD_TOO_LARGE
+            body["error"]["message"],
+            "HTML が大きすぎて送れません（上限は 10 MB）"
         );
+
+        let (status, body) = post_json(&router, "/api/upload", b"{".to_vec()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"]["code"], "bad_request");
     }
 }

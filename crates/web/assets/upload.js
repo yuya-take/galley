@@ -96,9 +96,11 @@
     try {
       const response = await fetch(url, { credentials: "same-origin", ...options });
       const isJson = response.headers.get("content-type")?.includes("application/json");
-      const body = isJson ? await response.json() : null;
+      // 失敗の本文は {"error": {"code", "message", "details"}}（crates/web/src/upload/api.rs）
+      const body = isJson ? await response.json().catch(() => null) : null;
       if (response.ok) return { ok: true, body };
-      return { ok: false, body, message: body?.message ?? statusMessage(response.status) };
+      const error = body?.error ?? null;
+      return { ok: false, error, message: error?.message ?? statusMessage(response.status) };
     } catch {
       return { ok: false, body: null, message: "サーバーにつながりませんでした。時間をおいて、もう一度試してください" };
     }
@@ -128,9 +130,9 @@
     if (result.ok) {
       state.checks[tab] = { status: "ok", title: result.body?.title ?? "" };
       if (!state.hasEditedTitle) titleInput.value = result.body?.title ?? "";
-    } else if (result.body?.external) {
+    } else if (result.error?.code === "external_resource") {
       state.checks[tab] = { status: "rejected", message: result.message };
-      showRejected(tab, result.body);
+      showRejected(tab, result.error.details);
     } else {
       state.checks[tab] = { status: "error", message: result.message };
     }
@@ -374,9 +376,9 @@
 
   // ---- 登録できない資料 ----
   let rejectedFrom = "file";
-  const showRejected = (tab, body) => {
+  // details は { total, resources: [{ line, kind, code }], ai_request }
+  const showRejected = (tab, external) => {
     rejectedFrom = tab;
-    const external = body.external;
     const name = tab === "file" ? state.file?.name ?? "" : "貼り付けた HTML";
     const size = tab === "file" ? state.file?.size ?? 0 : byteLength(pasteArea.value);
     find("[data-rejected-name]", rejected).textContent = name;
@@ -467,8 +469,8 @@
       return;
     }
     state.isSending = false;
-    if (result.body?.external) {
-      showRejected(tab, result.body);
+    if (result.error?.code === "external_resource") {
+      showRejected(tab, result.error.details);
     } else {
       showError(result.message);
     }
