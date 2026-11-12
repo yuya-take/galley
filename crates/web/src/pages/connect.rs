@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use galley_core::domain::revision::AuthorName;
+use galley_core::domain::{project::ProjectSummary, revision::AuthorName};
 use topcoat::{
     Result,
     context::{Cx, app_context},
@@ -43,7 +43,7 @@ pub async fn connect(cx: &Cx) -> Result<impl View> {
 }
 
 /// 頼み方の例に入れるプロジェクト名。サイドバーの最初のプロジェクト、無ければ [`EXAMPLE_PROJECT`]。
-fn example_project(projects: &[galley_core::domain::project::ProjectSummary]) -> String {
+fn example_project(projects: &[ProjectSummary]) -> String {
     projects.first().map_or_else(
         || EXAMPLE_PROJECT.to_owned(),
         |summary| summary.project.name.to_string(),
