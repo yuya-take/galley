@@ -46,7 +46,7 @@ use crate::{WebApp, author, pages::viewer::registered_path};
 /// `POST /api/upload/check` の本文。
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct CheckRequest {
+struct CheckRequest {
     html: String,
 }
 
@@ -94,7 +94,7 @@ impl From<&DocumentListItem> for TargetDocument {
 /// `POST /api/upload` の本文。
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct RegisterRequest {
+struct RegisterRequest {
     /// プロジェクトの slug。
     project: String,
     target: Target,
@@ -236,19 +236,25 @@ impl From<AppError> for ApiError {
                 )
             }
             // 資料名・変更メモ・更新者の検査など。core の文言が利用者向けに書いてあるので、そのまま出す
-            error => Self::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string()),
+            // （新しいエラーを足したら、利用者に見せてよい文言かを確かめてここに加える）
+            AppError::InvalidText(_)
+            | AppError::InvalidSlug(_)
+            | AppError::InvalidCrestColor(_)
+            | AppError::ProjectSlugTaken(_) => {
+                Self::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string())
+            }
         }
     }
 }
 
-/// 「10MB」「12.5MB」（1MB = 1024 × 1024 バイト。`assets/upload.js` の表示と揃える）。
+/// 「10 MB」「12.5 MB」（1MB = 1024 × 1024 バイト。`assets/upload.js` の表示と揃える）。
 fn megabytes(bytes: usize) -> String {
     const MEBIBYTE: usize = 1024 * 1024;
     let tenths = (bytes * 10 + MEBIBYTE / 2) / MEBIBYTE;
     if tenths.is_multiple_of(10) {
-        format!("{}MB", tenths / 10)
+        format!("{} MB", tenths / 10)
     } else {
-        format!("{}.{}MB", tenths / 10, tenths % 10)
+        format!("{}.{} MB", tenths / 10, tenths % 10)
     }
 }
 
@@ -468,16 +474,16 @@ mod tests {
         assert_eq!(large.status, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(
             large.body.message,
-            "HTML が大きすぎます（10MB。上限は 10MB）"
+            "HTML が大きすぎます（10 MB。上限は 10 MB）"
         );
         Ok(())
     }
 
     #[test]
     fn megabytes_rounds_to_one_decimal() {
-        assert_eq!(megabytes(10 * 1024 * 1024), "10MB");
-        assert_eq!(megabytes(1024 * 1024 + 512 * 1024), "1.5MB");
-        assert_eq!(megabytes(0), "0MB");
+        assert_eq!(megabytes(10 * 1024 * 1024), "10 MB");
+        assert_eq!(megabytes(1024 * 1024 + 512 * 1024), "1.5 MB");
+        assert_eq!(megabytes(0), "0 MB");
     }
 
     #[tokio::test]
