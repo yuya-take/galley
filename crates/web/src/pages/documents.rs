@@ -29,7 +29,7 @@ use topcoat::{
 };
 
 use self::params::ListParams;
-use crate::{WebApp, author, date, icon, mcp_command};
+use crate::{WebApp, author, date, icon, mcp_command, search};
 
 mod param {
     topcoat::router::path_param!(pub project);
@@ -363,7 +363,7 @@ async fn document_table<'a>(
                         let key = row_key(item);
                         <tr
                             class="document-row"
-                            data-title=(item.title.as_str().to_lowercase())
+                            data-search-text=(search::search_text(item))
                             @click=$(|_e| selected.set(key.to_owned()))
                         >
                             <td class="col-title">
@@ -427,7 +427,7 @@ async fn filters<'a>(
         <div class="filters">
             <label class="filter-search">
                 (Unescaped::new_unchecked(FILTER_SVG))
-                <input type="search" placeholder="この中を絞り込む" aria-label="資料名で絞り込む" data-row-filter="">
+                <input type="search" placeholder="この中を絞り込む" aria-label="資料名・プロジェクト名で絞り込む" data-row-filter="">
             </label>
             <a class="pill" href=(params.toggle_this_week().href(path)) aria-current=(params.is_this_week.then_some("true"))>"今週更新"</a>
             <a class="pill" href=(params.toggle_mine().href(path)) aria-current=(params.is_mine.then_some("true"))>"自分が更新"</a>

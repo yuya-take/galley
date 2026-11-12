@@ -38,6 +38,7 @@ mod icon;
 mod layout;
 mod mcp_command;
 mod pages;
+mod search;
 mod sidebar;
 
 /// 画面から使うユースケース。起動時に1つ作り、Topcoat の app context で共有する。
@@ -102,6 +103,7 @@ fn routes(builder: RouterBuilder) -> RouterBuilder {
         .route(pages::archive::restore_project)
         .route(pages::archive::restore_document)
         .route(pages::viewer::revert_to_revision)
+        .route(search::document_search)
 }
 
 #[cfg(test)]
