@@ -15,12 +15,14 @@ use std::sync::Arc;
 
 use galley_core::{
     app::{
-        document::{FindDocument, ListDocuments, RestoreDocument},
+        document::{
+            CreateDocument, FindDocument, FindDocumentByFileName, ListDocuments, RestoreDocument,
+        },
         error::AppError,
         project::{
             ArchiveProject, CreateProject, FindProject, ListProjects, RestoreProject, UpdateProject,
         },
-        revision::{ListRevisions, RevertToRevision},
+        revision::{AddRevision, ListRevisions, RevertToRevision},
     },
     domain::{project::ProjectSummary, shared::ArchiveFilter},
 };
@@ -40,6 +42,7 @@ mod mcp_command;
 mod pages;
 mod search;
 mod sidebar;
+mod upload;
 
 /// 画面から使うユースケース。起動時に1つ作り、Topcoat の app context で共有する。
 pub struct WebApp {
@@ -55,6 +58,12 @@ pub struct WebApp {
     pub list_revisions: ListRevisions,
     /// 資料ビューアの「この版に戻す」。
     pub revert_to_revision: RevertToRevision,
+    /// 登録（新しい資料）。
+    pub create_document: CreateDocument,
+    /// 登録（既存の資料の新しい版）。
+    pub add_revision: AddRevision,
+    /// 登録の確認ダイアログの「ファイル名が一致」。
+    pub find_document_by_file_name: FindDocumentByFileName,
     /// プレビューの iframe に入れる資料配信の URL。
     pub viewer_url: ViewerUrl,
     /// アプリの URL（空のプロジェクトに出す MCP の登録コマンド、URL の欄の前の「<ホスト>/」）。
@@ -83,7 +92,7 @@ pub fn service(app: Arc<WebApp>) -> std::io::Result<TowerService> {
 
 /// レイアウト・画面・procedure を登録する。
 fn routes(builder: RouterBuilder) -> RouterBuilder {
-    builder
+    upload::routes(builder)
         .layout(layout::root_layout)
         .page(pages::documents::all_documents)
         .page(pages::documents::project_documents)

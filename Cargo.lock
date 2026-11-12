@@ -1488,6 +1488,8 @@ dependencies = [
  "galley-core",
  "http",
  "jiff",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "topcoat",

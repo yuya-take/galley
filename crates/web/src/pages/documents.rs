@@ -145,7 +145,7 @@ pub async fn all_documents(cx: &Cx) -> Result<impl View> {
                 </div>
                 <p class="page-description">(description)</p>
             </div>
-            register_button()
+            register_button(project: None)
         </header>
         document_list(
             path: "/",
@@ -198,7 +198,7 @@ pub async fn project_documents(cx: &Cx) -> Result<impl View> {
                 (Unescaped::new_unchecked(SETTINGS_SVG))
                 "設定"
             </a>
-            register_button()
+            register_button(project: Some(project.slug.to_string()))
         </header>
         document_list(
             path: &path,
@@ -255,11 +255,11 @@ async fn page_count(count: Option<usize>) -> Result<impl View> {
     })
 }
 
-/// 「HTMLを登録」。登録の流れは #17 で作る。
+/// 「HTMLを登録」。登録のダイアログ（`crate::upload`）を開く。プロジェクトの画面なら、そのプロジェクトに登録する。
 #[component]
-async fn register_button() -> Result<impl View> {
+async fn register_button(project: Option<String>) -> Result<impl View> {
     Ok(view! {
-        <button type="button" class="button button--primary" aria-disabled="true" title="登録は準備中です">"＋ HTMLを登録"</button>
+        <button type="button" class="button button--primary" data-action="open-upload" data-upload-project=(project)>"＋ HTMLを登録"</button>
     })
 }
 
