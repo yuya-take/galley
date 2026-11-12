@@ -112,6 +112,8 @@ struct Viewer {
     revisions: Vec<Revision>,
     /// 表示する版の、`revisions` での位置。
     shown: usize,
+    /// URL で版を指定して開いたか（`/v/<番号>`）。
+    has_number: bool,
 }
 
 impl Viewer {
@@ -142,6 +144,7 @@ impl Viewer {
             document,
             revisions,
             shown,
+            has_number: number.is_some(),
         }))
     }
 
@@ -151,6 +154,16 @@ impl Viewer {
 
     fn latest(&self) -> &Revision {
         &self.revisions[0]
+    }
+
+    /// 表示中の版の URL（「リンクをコピー」）。版を指定して開いたときは、最新版でもその版の URL にする
+    /// （あとで版が増えても、共有した人が見た版を開くように）。
+    fn shown_path(&self) -> String {
+        if self.has_number {
+            format!("{}/v/{}", self.document_path(), self.shown().number)
+        } else {
+            self.document_path()
+        }
     }
 
     fn is_latest(&self) -> bool {
@@ -259,7 +272,7 @@ async fn viewer_screen<'a>(
                 </div>
                 revision_menu(viewer: viewer, now: &now)
                 <div class="viewer-actions">
-                    <button type="button" class="button button--outline" data-copy-link=(viewer.revision_path(shown))>
+                    <button type="button" class="button button--outline" data-copy-link=(viewer.shown_path())>
                         <span data-copy-label="">"リンクをコピー"</span>
                     </button>
                     if let Some(frame_url) = frame_url.clone() {
@@ -584,6 +597,7 @@ mod tests {
         );
         assert!(viewer.newer().is_none());
         assert_eq!(viewer.revision_path(viewer.shown()), "/sales/plan");
+        assert_eq!(viewer.shown_path(), "/sales/plan");
         assert_eq!(viewer.project_path(), "/sales");
         Ok(())
     }
@@ -594,6 +608,7 @@ mod tests {
         let viewer = viewer(&app, Some("2")).await.ok_or("見つからない")?;
         assert_eq!(viewer.shown().number.get(), 2);
         assert_eq!(viewer.shown().message.as_str(), "第2版");
+        assert_eq!(viewer.shown_path(), "/sales/plan/v/2");
         assert!(!viewer.is_latest());
         assert_eq!(
             viewer.older().map(|r| viewer.revision_path(r)).as_deref(),
@@ -616,6 +631,8 @@ mod tests {
             .map_err(|e| e.to_string())?
             .ok_or("見つからない")?;
         assert!(latest.is_latest());
+        // 版を指定して開いたら、リンクはその版の URL のまま
+        assert_eq!(latest.shown_path(), "/sales/plan/v/3");
         Ok(())
     }
 
