@@ -53,6 +53,7 @@ docs: READMEにClaude Code開発ガイドを追加
 - 日本語で記述（プロジェクト慣習）
 - 1行目は簡潔に（70文字目安）
 - `Co-Authored-By` は不要（settings.jsonで無効化済み）
+- Claude のセッションの URL（`https://claude.ai/code/session_…`、`Claude-Session:` の行）はコミットメッセージにも PR の本文にも書かない。公開リポジトリに残す必要のない情報なので（settings.json の `attribution.sessionUrl: false` で止めている）
 
 ## コミット分割
 
