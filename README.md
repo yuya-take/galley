@@ -4,7 +4,7 @@ AI が生成した HTML 資料を、プロジェクト単位で保存・閲覧�
 社内ネットワークに置いて、ログインなしでチームの誰でも資料を登録・閲覧できます。
 
 > [!WARNING]
-> 開発中です。まだ動くリリースはありません。進み具合は [MVP マイルストーン](https://github.com/yuya-take/galley/milestone/2) を見てください。
+> 開発中です。まだ動くリリースはありません。進み具合は [MVP マイルストーン](https://github.com/yuya-take/galley-docs/milestone/2) を見てください。
 
 ## 特徴
 
@@ -26,7 +26,7 @@ docker run -d --name galley --restart unless-stopped \
   -v galley-data:/data \
   -e ALLOWED_HOSTS=galley.example.com \
   -e TZ=Asia/Tokyo \
-  ghcr.io/yuya-take/galley
+  ghcr.io/yuya-take/galley-docs
 ```
 
 - `:8080`：アプリ本体（画面と MCP の `/mcp`）
@@ -82,7 +82,7 @@ docker run --rm -v galley-data-restored:/data -v "$PWD":/backup busybox \
 ```yaml
 services:
   galley:
-    image: ghcr.io/yuya-take/galley
+    image: ghcr.io/yuya-take/galley-docs
     restart: unless-stopped
     ports: ["8080:8080", "8081:8081"]
     environment:
@@ -142,4 +142,6 @@ Rust（[Axum](https://github.com/tokio-rs/axum)、[Topcoat](https://github.com/t
 
 ## ライセンス
 
-[MIT](LICENSE)
+[MIT](LICENSE-MIT) と [Apache-2.0](LICENSE-APACHE) のデュアルライセンスです。使う人はどちらかを選べます。
+
+特に断りのない限り、このリポジトリに送られた貢献は、Apache-2.0 の定義どおり、上と同じ MIT と Apache-2.0 のデュアルライセンスで提供されるものとします。
