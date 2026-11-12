@@ -198,9 +198,7 @@ pub async fn revision_preview(
         }
         .boxed());
     };
-    let has_author = author::from_headers(request::headers(cx)).is_some();
     let is_latest = history.is_latest(&revision);
-    let is_busy = signal(cx, || false);
     let frame_url = host(cx).and_then(|host| app.viewer_url.revision_url(host, revision.id));
     let frame_title = format!(
         "{}（第{number}版）のプレビュー",
@@ -257,32 +255,8 @@ pub async fn revision_preview(
                 <a class="button button--outline" href=(history.revision_path(&revision))>"この版を開く" <kbd>"↵"</kbd></a>
                 if is_latest {
                     <button type="button" class="button button--primary" disabled="">"この版に戻す"</button>
-                } else if has_author {
-                    <button
-                        type="button"
-                        class="button button--primary"
-                        :disabled=$(is_busy.get())
-                        @click=$(async |_e: Event| {
-                            is_busy.set(true);
-                            error.set("".to_owned());
-                            let result = revert_to_revision(project, document, number).await;
-                            if result.is_ok() {
-                                // 移るまでボタンは押せないままにする
-                                let url = result.unwrap();
-                                raw!("location.assign(${url})", drop(url));
-                            } else {
-                                is_busy.set(false);
-                                error.set(result.unwrap_err());
-                            }
-                        })
-                    >"この版に戻す"</button>
                 } else {
-                    <button
-                        type="button"
-                        class="button button--primary"
-                        data-action="change-author"
-                        title="戻す前に、更新者として残る名前を設定します"
-                    >"この版に戻す"</button>
+                    revert_button(project: project, document: document, number: number, error: &error)
                 }
             </div>
             <p class="history-note">(note)</p>
@@ -290,6 +264,49 @@ pub async fn revision_preview(
         </div>
     }
     .boxed())
+}
+
+/// 過去の版の「この版に戻す」。押したら戻して、登録直後の通知付きの資料ビューアに移る。
+/// 名前が未設定なら、先に名前のダイアログを出す（`assets/app.js` の `data-action=change-author`）。
+#[component]
+async fn revert_button<'a>(
+    cx: &'a Cx,
+    project: String,
+    document: String,
+    number: u32,
+    error: &'a Signal<String>,
+) -> Result<impl View> {
+    let has_author = author::from_headers(request::headers(cx)).is_some();
+    let is_busy = signal(cx, || false);
+    Ok(view! {
+        if has_author {
+            <button
+                type="button"
+                class="button button--primary"
+                :disabled=$(is_busy.get())
+                @click=$(async |_e: Event| {
+                    is_busy.set(true);
+                    error.set("".to_owned());
+                    let result = revert_to_revision(project, document, number).await;
+                    if result.is_ok() {
+                        // 移るまでボタンは押せないままにする（二度押しで版が2つ増えないように）
+                        let url = result.unwrap();
+                        raw!("location.assign(${url})", drop(url));
+                    } else {
+                        is_busy.set(false);
+                        error.set(result.unwrap_err());
+                    }
+                })
+            >"この版に戻す"</button>
+        } else {
+            <button
+                type="button"
+                class="button button--primary"
+                data-action="change-author"
+                title="戻す前に、更新者として残る名前を設定します"
+            >"この版に戻す"</button>
+        }
+    })
 }
 
 /// 履歴を出す資料と版。
