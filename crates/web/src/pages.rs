@@ -3,6 +3,7 @@
 pub mod archive;
 pub mod connect;
 pub mod documents;
+pub mod history;
 pub mod new_project;
 mod project_form;
 pub mod project_settings;

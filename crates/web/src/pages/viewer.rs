@@ -217,7 +217,7 @@ fn parse_number(text: &str) -> Option<u32> {
 }
 
 /// アーカイブしていないプロジェクトと資料を、URL の slug から探す。
-async fn find_active(
+pub(super) async fn find_active(
     app: &WebApp,
     project_slug: &str,
     document_slug: &str,
@@ -378,7 +378,8 @@ async fn revision_menu<'a>(viewer: &'a Viewer, now: &'a Zoned) -> Result<impl Vi
     })
 }
 
-fn revision_message(revision: &Revision) -> String {
+/// 版の変更メモ。空なら「変更メモなし」。
+pub(super) fn revision_message(revision: &Revision) -> String {
     match revision.message.as_str() {
         "" => "変更メモなし".to_owned(),
         message => message.to_owned(),
@@ -409,11 +410,7 @@ async fn past_banner<'a>(
         shown.author_name,
         latest.number
     );
-    let confirm = format!(
-        "この版に戻すと、同じ内容の「第{}版」が追加されます。第{}版以前もそのまま残ります。",
-        latest.number.next(),
-        latest.number
-    );
+    let confirm = revert_note(latest.number);
 
     Ok(view! {
         <section class="viewer-banner" aria-label="過去の版">
@@ -471,6 +468,14 @@ async fn past_banner<'a>(
             form_error(error: &error)
         </section>
     })
+}
+
+/// 「この版に戻す」の前に出す説明。`latest` は最新の版の番号。版の履歴（#16）でも使う。
+pub(super) fn revert_note(latest: RevisionNumber) -> String {
+    format!(
+        "この版に戻すと、同じ内容の「第{}版」が追加されます。第{latest}版以前もそのまま残ります。",
+        latest.next()
+    )
 }
 
 /// 登録した直後の通知。「閉じる」と、URL から `?registered=` を消す処理は `assets/app.js`。
