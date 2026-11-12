@@ -20,11 +20,11 @@ use axum::Router;
 use galley_core::{
     adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
     app::{
-        document::{FindDocument, ListDocuments, RestoreDocument},
+        document::{FindDocument, FindDocumentById, ListDocuments, RestoreDocument},
         project::{
             ArchiveProject, CreateProject, FindProject, ListProjects, RestoreProject, UpdateProject,
         },
-        revision::{ListRevisions, ReadRevisionContent},
+        revision::{ListRevisions, ReadRevisionContent, RevertToRevision},
     },
 };
 use galley_web::{AppUrl, ViewerUrl};
@@ -75,8 +75,9 @@ async fn main() -> anyhow::Result<()> {
         restore_project: RestoreProject::new(projects),
         list_documents: ListDocuments::new(documents.clone()),
         find_document: FindDocument::new(documents.clone()),
-        restore_document: RestoreDocument::new(documents),
+        restore_document: RestoreDocument::new(documents.clone()),
         list_revisions: ListRevisions::new(Arc::new(database.revisions())),
+        revert_to_revision: RevertToRevision::new(documents, Arc::new(database.revisions())),
         viewer_url,
         app_url: app_url.clone(),
     }))?;
@@ -99,10 +100,10 @@ async fn main() -> anyhow::Result<()> {
         mcp_token,
     );
     let viewer = viewer::router(
-        Arc::new(ReadRevisionContent::new(
-            Arc::new(database.revisions()),
-            blobs,
-        )),
+        Arc::new(viewer::ViewerApp {
+            read_revision: ReadRevisionContent::new(Arc::new(database.revisions()), blobs),
+            find_document: FindDocumentById::new(Arc::new(database.documents())),
+        }),
         allowed_hosts,
     );
 

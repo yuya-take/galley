@@ -1,6 +1,7 @@
 //! 資料配信（アプリ本体と別オリジン）。
 //!
-//! 資料の HTML を `GET /r/<revision_id>` で返す。資料内のスクリプトがアプリを操作したり外部と
+//! 資料の HTML を `GET /r/<revision_id>` で返し、`GET /r/<revision_id>/download` でファイルとして
+//! ダウンロードさせる（ファイル名は `<資料の slug>.html`）。資料内のスクリプトがアプリを操作したり外部と
 //! 通信したりしないよう、sandbox 付きの CSP を付ける。404 などを含むすべてのレスポンスに
 //! 同じヘッダーを付ける（URL を直接開かれても同じ制限がかかるように）。
 
@@ -15,7 +16,11 @@ use axum::{
     routing::get,
 };
 use galley_core::{
-    app::{error::AppError, revision::ReadRevisionContent},
+    app::{
+        document::FindDocumentById,
+        error::AppError,
+        revision::{ReadRevisionContent, RevisionContent},
+    },
     domain::shared::RevisionId,
 };
 
@@ -26,12 +31,20 @@ pub const CSP: &str = "sandbox allow-scripts; default-src 'none'; script-src 'un
 /// 版は変更されないので、ブラウザーに長く持たせる。
 const CACHE_IMMUTABLE: &str = "public, max-age=31536000, immutable";
 
+/// 資料配信から使うユースケース。
+pub struct ViewerApp {
+    pub read_revision: ReadRevisionContent,
+    /// ダウンロードのファイル名（資料の slug）を知るのに使う。
+    pub find_document: FindDocumentById,
+}
+
 /// Host の検査で断ったレスポンスにも同じヘッダーを付けるよう、ヘッダーを一番外に置く。
-pub fn router(read: Arc<ReadRevisionContent>, allowed_hosts: Arc<AllowedHosts>) -> Router {
+pub fn router(app: Arc<ViewerApp>, allowed_hosts: Arc<AllowedHosts>) -> Router {
     Router::new()
         .route("/r/{revision_id}", get(serve_revision))
+        .route("/r/{revision_id}/download", get(download_revision))
         .fallback(not_found)
-        .with_state(read)
+        .with_state(app)
         .layer(middleware::from_fn_with_state(allowed_hosts, check_host))
         .layer(middleware::map_response(security_headers))
 }
@@ -59,13 +72,10 @@ async fn security_headers(mut response: Response) -> Response {
 }
 
 async fn serve_revision(
-    State(read): State<Arc<ReadRevisionContent>>,
+    State(app): State<Arc<ViewerApp>>,
     Path(revision_id): Path<String>,
 ) -> Response {
-    let Ok(id) = RevisionId::parse(&revision_id) else {
-        return not_found().await;
-    };
-    match read.execute(id).await {
+    match read_revision(&app, &revision_id).await {
         Ok(content) => (
             [
                 (header::CONTENT_TYPE, "text/html; charset=utf-8"),
@@ -74,19 +84,87 @@ async fn serve_revision(
             content.html,
         )
             .into_response(),
-        Err(AppError::RevisionNotFound) => not_found().await,
+        Err(err) => err.into_response(),
+    }
+}
+
+/// 版の HTML をファイルとしてダウンロードさせる。資料ビューアの「HTML をダウンロード」。
+///
+/// 画面と別のオリジンなので、`<a download>` ではファイル名を付けられない。そのため
+/// `Content-Disposition: attachment` を付けて返す。資料の slug は変えられるので、キャッシュさせない。
+async fn download_revision(
+    State(app): State<Arc<ViewerApp>>,
+    Path(revision_id): Path<String>,
+) -> Response {
+    let content = match read_revision(&app, &revision_id).await {
+        Ok(content) => content,
+        Err(err) => return err.into_response(),
+    };
+    let document = match app
+        .find_document
+        .execute(content.revision.document_id)
+        .await
+    {
+        Ok(document) => document,
         Err(err) => {
-            tracing::error!(%id, "版の HTML を読めません: {err}");
-            text(
+            tracing::error!(revision_id, "版の資料を読めません: {err}");
+            return ReadError::Failed.into_response();
+        }
+    };
+    (
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8".to_owned()),
+            (
+                header::CONTENT_DISPOSITION,
+                content_disposition(&document.slug.file_name()),
+            ),
+        ],
+        content.html,
+    )
+        .into_response()
+}
+
+/// `Content-Disposition` の値。ファイル名は資料の slug（英小文字・数字・ハイフン）と `.html` なので、
+/// そのまま引用符で囲める。
+fn content_disposition(file_name: &str) -> String {
+    format!("attachment; filename=\"{file_name}\"")
+}
+
+/// 版を読めなかったとき。
+enum ReadError {
+    /// ID が正しくない・見つからない（404）。
+    NotFound,
+    /// DB やストレージから読めない（500）。原因はログに残す。
+    Failed,
+}
+
+impl IntoResponse for ReadError {
+    fn into_response(self) -> Response {
+        match self {
+            Self::NotFound => text(StatusCode::NOT_FOUND, "資料が見つかりません"),
+            Self::Failed => text(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "資料を読み込めませんでした",
-            )
+            ),
+        }
+    }
+}
+
+/// 版の HTML を読む。
+async fn read_revision(app: &ViewerApp, revision_id: &str) -> Result<RevisionContent, ReadError> {
+    let id = RevisionId::parse(revision_id).map_err(|_| ReadError::NotFound)?;
+    match app.read_revision.execute(id).await {
+        Ok(content) => Ok(content),
+        Err(AppError::RevisionNotFound) => Err(ReadError::NotFound),
+        Err(err) => {
+            tracing::error!(%id, "版の HTML を読めません: {err}");
+            Err(ReadError::Failed)
         }
     }
 }
 
 async fn not_found() -> Response {
-    text(StatusCode::NOT_FOUND, "資料が見つかりません")
+    ReadError::NotFound.into_response()
 }
 
 fn text(status: StatusCode, body: &'static str) -> Response {
@@ -121,7 +199,7 @@ mod tests {
     const HTML: &str =
         "<!doctype html><title>計画</title><script>document.body.append('ok')</script>";
 
-    /// 資料を1つ登録した資料配信と、その版の ID。
+    /// 資料を1つ登録した資料配信と、その版の ID。資料の slug は `keikaku`。
     async fn viewer() -> Result<(Router, RevisionId), Box<dyn Error>> {
         let database = SqliteDatabase::in_memory().await?;
         let blobs = Arc::new(ObjectStoreBlobStore::in_memory());
@@ -141,7 +219,7 @@ mod tests {
         .execute(CreateDocumentInput {
             project_id: project.id,
             title: None,
-            slug: SlugSource::None,
+            slug: SlugSource::FileName("keikaku.html".to_owned()),
             revision: RevisionInput {
                 html: HTML.as_bytes().to_vec(),
                 message: String::new(),
@@ -150,12 +228,12 @@ mod tests {
             },
         })
         .await?;
-        let read = Arc::new(ReadRevisionContent::new(
-            Arc::new(database.revisions()),
-            blobs,
-        ));
+        let app = Arc::new(ViewerApp {
+            read_revision: ReadRevisionContent::new(Arc::new(database.revisions()), blobs),
+            find_document: FindDocumentById::new(Arc::new(database.documents())),
+        });
         let allowed = Arc::new(AllowedHosts::parse(None)?);
-        Ok((router(read, allowed), created.revision.id))
+        Ok((router(app, allowed), created.revision.id))
     }
 
     async fn send(router: &Router, method: &str, uri: &str) -> Result<Response, Box<dyn Error>> {
@@ -218,6 +296,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn download_attaches_html_named_after_document() -> Result<(), Box<dyn Error>> {
+        let (router, id) = viewer().await?;
+        let response = send(&router, "GET", &format!("/r/{id}/download")).await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_security_headers(&response);
+        let headers = response.headers();
+        assert_eq!(
+            headers.get(header::CONTENT_TYPE).map(|v| v.as_bytes()),
+            Some(&b"text/html; charset=utf-8"[..])
+        );
+        assert_eq!(
+            headers
+                .get(header::CONTENT_DISPOSITION)
+                .map(|v| v.as_bytes()),
+            Some(&b"attachment; filename=\"keikaku.html\""[..])
+        );
+        // 資料の slug は変えられるので、ファイル名ごとキャッシュさせない
+        assert_eq!(
+            headers.get(header::CACHE_CONTROL).map(|v| v.as_bytes()),
+            Some(&b"no-store"[..])
+        );
+        let body = response.into_body().collect().await?.to_bytes();
+        assert_eq!(body, HTML.as_bytes());
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn head_returns_headers_without_body() -> Result<(), Box<dyn Error>> {
         let (router, id) = viewer().await?;
         let response = send(&router, "HEAD", &format!("/r/{id}")).await?;
@@ -244,6 +349,22 @@ mod tests {
             ("GET", "/r/".to_owned(), StatusCode::NOT_FOUND),
             ("GET", "/".to_owned(), StatusCode::NOT_FOUND),
             ("GET", "/r/a/b".to_owned(), StatusCode::NOT_FOUND),
+            (
+                "GET",
+                format!("/r/{}/download", RevisionId::generate()),
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                "GET",
+                "/r/not-an-id/download".to_owned(),
+                StatusCode::NOT_FOUND,
+            ),
+            ("GET", format!("/r/{id}/download/x"), StatusCode::NOT_FOUND),
+            (
+                "POST",
+                format!("/r/{id}/download"),
+                StatusCode::METHOD_NOT_ALLOWED,
+            ),
             ("POST", format!("/r/{id}"), StatusCode::METHOD_NOT_ALLOWED),
             ("DELETE", format!("/r/{id}"), StatusCode::METHOD_NOT_ALLOWED),
         ];

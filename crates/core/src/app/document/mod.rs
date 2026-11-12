@@ -10,7 +10,7 @@ mod rename;
 pub use archive::{ArchiveDocument, RestoreDocument};
 pub use choose_slug::{ChooseDocumentSlug, SlugSource};
 pub use create::{CreateDocument, CreateDocumentInput};
-pub use find::{FindDocument, FindDocumentByFileName};
+pub use find::{FindDocument, FindDocumentByFileName, FindDocumentById};
 pub use list::ListDocuments;
 pub use rename::RenameDocument;
 

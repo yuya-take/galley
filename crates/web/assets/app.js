@@ -173,4 +173,28 @@
   document.querySelectorAll("[data-autosubmit]").forEach((select) => {
     select.addEventListener("change", () => select.form.requestSubmit());
   });
+  // ---- 資料を読む ----
+  const viewer = document.querySelector(".viewer");
+  if (viewer) {
+    // [ と ] で前後の版に移る。資料（iframe）にフォーカスがあるときは、キーが資料に届くので効かない
+    document.addEventListener("keydown", (event) => {
+      if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (document.querySelector("dialog[open]") || isTyping(document.activeElement)) return;
+      const href = event.key === "[" ? viewer.dataset.olderHref
+        : event.key === "]" ? viewer.dataset.newerHref
+        : undefined;
+      if (!href) return;
+      event.preventDefault();
+      location.href = href;
+    });
+
+    // 登録した直後の通知。再読み込みや URL のコピーで出し直さないよう、URL から ?registered= を消す
+    const notice = viewer.querySelector("[data-registered-notice]");
+    if (notice) {
+      const url = new URL(location.href);
+      url.searchParams.delete("registered");
+      history.replaceState(history.state, "", url);
+      notice.querySelector("[data-action=close-notice]")?.addEventListener("click", () => notice.remove());
+    }
+  }
 })();

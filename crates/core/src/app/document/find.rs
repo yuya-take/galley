@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
+use super::load;
 use crate::{
     app::error::AppError,
     domain::{
         document::{Document, DocumentRepository, DocumentSlug},
-        shared::ProjectId,
+        shared::{DocumentId, ProjectId},
     },
 };
 
@@ -24,6 +25,22 @@ impl FindDocument {
             .find_by_slug(project_id, &slug)
             .await?
             .ok_or(AppError::DocumentNotFound)
+    }
+}
+
+/// ID から資料を探す（アーカイブしたものも返す）。資料配信が、版の HTML をダウンロードするときの
+/// ファイル名（資料の slug）を知るのに使う。
+pub struct FindDocumentById {
+    documents: Arc<dyn DocumentRepository>,
+}
+
+impl FindDocumentById {
+    pub fn new(documents: Arc<dyn DocumentRepository>) -> Self {
+        Self { documents }
+    }
+
+    pub async fn execute(&self, id: DocumentId) -> Result<Document, AppError> {
+        load(self.documents.as_ref(), id).await
     }
 }
 

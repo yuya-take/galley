@@ -215,7 +215,7 @@ pub async fn project_documents(cx: &Cx) -> Result<impl View> {
 }
 
 /// 見つからないエラーを `None` にする（ほかのエラーはそのまま返す）。
-fn found<T>(result: Result<T, AppError>) -> Result<Option<T>, AppError> {
+pub(super) fn found<T>(result: Result<T, AppError>) -> Result<Option<T>, AppError> {
     match result {
         Ok(value) => Ok(Some(value)),
         Err(AppError::ProjectNotFound | AppError::DocumentNotFound) => Ok(None),
