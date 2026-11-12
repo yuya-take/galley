@@ -39,6 +39,12 @@ impl DocumentSlug {
         Slug::normalize(stem).map(Self)
     }
 
+    /// ダウンロードするときのファイル名（`jigyo-keikaku` → `jigyo-keikaku.html`）。
+    /// [`Self::from_file_name`] に渡すと同じ slug に戻る。
+    pub fn file_name(&self) -> String {
+        format!("{}.html", self.as_str())
+    }
+
     /// ファイル名がない資料の slug（`doc-3f9a1c2e`）。`random` は呼び出し側で乱数から作る。
     pub fn generated(random: u32) -> Self {
         Self(Slug::with_random(GENERATED_SLUG_PREFIX, random))
@@ -91,6 +97,18 @@ mod tests {
         assert_eq!(slug("事業計画_2026.html"), Some("2026".to_owned()));
         assert_eq!(slug("事業計画.html"), None);
         assert_eq!(slug(".html"), None);
+    }
+
+    #[test]
+    fn file_name_round_trips() {
+        let slug = DocumentSlug::parse("jigyo-keikaku-2");
+        let name = slug.as_ref().map(DocumentSlug::file_name);
+        assert_eq!(name.as_deref(), Ok("jigyo-keikaku-2.html"));
+        assert_eq!(
+            name.ok()
+                .and_then(|name| DocumentSlug::from_file_name(&name)),
+            slug.ok()
+        );
     }
 
     #[test]
