@@ -293,7 +293,7 @@ mod tests {
         },
         domain::{
             blob::BlobStore, document::DocumentRepository, revision::RevisionSource,
-            shared::DocumentId,
+            shared::DocumentId, upload::HtmlSizeLimit,
         },
     };
 
@@ -326,6 +326,7 @@ mod tests {
                 Arc::new(database.projects()),
                 Arc::new(database.documents()),
                 blobs.clone(),
+                HtmlSizeLimit::DEFAULT,
             );
             let mut document_id = None;
             for (file_name, html) in [("plan.html", V1), ("copy.html", V1)] {
@@ -344,6 +345,7 @@ mod tests {
                 Arc::new(database.documents()),
                 Arc::new(database.revisions()),
                 blobs.clone(),
+                HtmlSizeLimit::DEFAULT,
             )
             .execute(document_id, input(V2))
             .await?;

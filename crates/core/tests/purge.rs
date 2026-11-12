@@ -30,6 +30,7 @@ use galley_core::{
             RevisionSource,
         },
         shared::{DocumentId, ProjectId, RevisionId},
+        upload::HtmlSizeLimit,
     },
 };
 use jiff::Timestamp;
@@ -101,6 +102,7 @@ impl Fixture {
             Arc::new(self.database.projects()),
             Arc::new(self.database.documents()),
             self.blobs.clone(),
+            HtmlSizeLimit::DEFAULT,
         )
     }
 
@@ -120,6 +122,7 @@ impl Fixture {
             Arc::new(self.database.documents()),
             Arc::new(self.database.revisions()),
             self.blobs.clone(),
+            HtmlSizeLimit::DEFAULT,
         )
         .execute(id, input(html))
         .await
