@@ -1,6 +1,11 @@
 /* 資料の登録（ドラッグ中の重ね表示、確認のダイアログ、登録できない資料のダイアログ）。
    色は app.css のデザイントークンを使う。 */
 
+:root {
+  /* 「そのまま登録できます」。羊皮紙の上で WCAG AA（4.5:1）を満たす緑 */
+  --color-success: #2E6B4C;
+}
+
 /* ---- ドラッグ中：画面全体を受け皿にする。資料の iframe（別オリジン）より上に置いてドロップを受け止める ---- */
 
 .upload-drop {
@@ -140,11 +145,12 @@
 
 .upload-dialog p.upload-file-meta, .upload-rejected p.upload-file-meta { font-size: 12px; }
 
-.upload-status { color: var(--crest-green); font-weight: 700; }
+/* .dialog-body p の文字色より優先する */
+.upload-dialog .upload-status { color: var(--color-success); font-weight: 700; }
 
 .upload-status:empty { display: none; }
 
-.upload-status--error { color: var(--color-primary); }
+.upload-dialog .upload-status--error { color: var(--color-primary); }
 
 .upload-paste { min-height: 160px; font-family: var(--font-mono); font-size: 12px; line-height: 1.5; white-space: pre; }
 
