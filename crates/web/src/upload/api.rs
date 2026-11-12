@@ -25,7 +25,7 @@ use galley_core::{
         project::{Project, ProjectError},
         revision::{AuthorName, RevisionSource},
         shared::ArchiveFilter,
-        upload::{ExternalResources, HtmlDocument, MAX_HTML_BYTES, UploadError},
+        upload::{ExternalResources, HtmlDocument, HtmlSizeLimit, UploadError},
     },
 };
 use http::StatusCode;
@@ -248,8 +248,8 @@ impl From<UploadError> for ApiError {
                 ErrorCode::TooLarge,
                 format!(
                     "HTML が大きすぎます（{}。上限は {}）",
-                    megabytes(size),
-                    megabytes(max)
+                    format_size(size),
+                    format_size(max)
                 ),
             ),
             UploadError::NotUtf8 => Self::new(
@@ -307,14 +307,20 @@ impl From<AppError> for ApiError {
     }
 }
 
-/// 「10 MB」「12.5 MB」（1MB = 1024 × 1024 バイト。`assets/upload.js` の表示と揃える）。
-fn megabytes(bytes: usize) -> String {
+/// 「512 KB」「10 MB」「12.5 MB」（1MB 未満は KB。1KB = 1024 バイト。`assets/upload.js` の表示と揃える）。
+fn format_size(bytes: usize) -> String {
+    const KIBIBYTE: usize = 1024;
     const MEBIBYTE: usize = 1024 * 1024;
-    let tenths = (bytes * 10 + MEBIBYTE / 2) / MEBIBYTE;
-    if tenths.is_multiple_of(10) {
-        format!("{} MB", tenths / 10)
+    let (unit, label) = if bytes < MEBIBYTE {
+        (KIBIBYTE, "KB")
     } else {
-        format!("{}.{} MB", tenths / 10, tenths % 10)
+        (MEBIBYTE, "MB")
+    };
+    let tenths = (bytes * 10 + unit / 2) / unit;
+    if tenths.is_multiple_of(10) {
+        format!("{} {label}", tenths / 10)
+    } else {
+        format!("{}.{} {label}", tenths / 10, tenths % 10)
     }
 }
 
@@ -338,7 +344,7 @@ pub async fn json_errors(cx: &Cx, body: Body, next: Next<'_>) -> Result<Response
                 ErrorCode::TooLarge,
                 format!(
                     "HTML が大きすぎて送れません（上限は {}）",
-                    megabytes(MAX_HTML_BYTES)
+                    format_size(app_context::<HtmlSizeLimit>(cx).bytes())
                 ),
             )),
         ),
@@ -357,7 +363,7 @@ pub async fn json_errors(cx: &Cx, body: Body, next: Next<'_>) -> Result<Response
 /// HTML を検査する。外部リソースを読み込んでいれば、該当箇所と AI への依頼文を返す。
 #[route(POST "/api/upload/check")]
 pub async fn check_upload(cx: &Cx, Json(input): Json<CheckRequest>) -> Result<Response> {
-    respond(cx, check(input.html))
+    respond(cx, check(input.html, *app_context(cx)))
 }
 
 /// 登録先の候補。
@@ -386,8 +392,8 @@ pub async fn register_upload(cx: &Cx, Json(input): Json<RegisterRequest>) -> Res
     respond(cx, register(app, author.as_ref(), input).await)
 }
 
-fn check(html: String) -> Result<CheckResponse, ApiError> {
-    let html = HtmlDocument::parse(html.into_bytes())?;
+fn check(html: String, limit: HtmlSizeLimit) -> Result<CheckResponse, ApiError> {
+    let html = HtmlDocument::parse(html.into_bytes(), limit)?;
     Ok(CheckResponse {
         title: html.title().map(str::to_owned),
     })
@@ -479,7 +485,7 @@ async fn register(
 
 #[cfg(test)]
 mod tests {
-    use galley_core::{app::project::ProjectInput, domain::upload::MAX_HTML_BYTES};
+    use galley_core::app::project::ProjectInput;
     use serde_json::{Value, json};
 
     use super::*;
@@ -524,13 +530,13 @@ mod tests {
     #[test]
     fn check_returns_title() {
         assert_eq!(
-            check(HTML.to_owned()),
+            check(HTML.to_owned(), HtmlSizeLimit::DEFAULT),
             Ok(CheckResponse {
                 title: Some("事業計画".to_owned())
             })
         );
         assert_eq!(
-            check("<p>題名なし</p>".to_owned()),
+            check("<p>題名なし</p>".to_owned(), HtmlSizeLimit::DEFAULT),
             Ok(CheckResponse { title: None })
         );
     }
@@ -538,7 +544,9 @@ mod tests {
     #[test]
     fn check_lists_external_resources_with_ai_request() -> TestResult {
         let html = "<!doctype html>\n<title>t</title>\n<script src=\"https://cdn.jsdelivr.net/npm/chart.js@4\"></script>";
-        let error = check(html.to_owned()).err().ok_or("断られない")?;
+        let error = check(html.to_owned(), HtmlSizeLimit::DEFAULT)
+            .err()
+            .ok_or("断られない")?;
         assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(
             to_json(&error.body),
@@ -561,14 +569,19 @@ mod tests {
 
     #[test]
     fn check_explains_other_problems() -> TestResult {
-        let empty = check("  \n".to_owned()).err().ok_or("断られない")?;
+        let empty = check("  \n".to_owned(), HtmlSizeLimit::DEFAULT)
+            .err()
+            .ok_or("断られない")?;
         assert_eq!(
             to_json(&empty.body),
             json!({ "error": { "code": "invalid_html", "message": "HTML が空です" } })
         );
-        let large = check("a".repeat(MAX_HTML_BYTES + 1))
-            .err()
-            .ok_or("断られない")?;
+        let large = check(
+            "a".repeat(HtmlSizeLimit::DEFAULT.bytes() + 1),
+            HtmlSizeLimit::DEFAULT,
+        )
+        .err()
+        .ok_or("断られない")?;
         assert_eq!(large.status, StatusCode::PAYLOAD_TOO_LARGE);
         assert_eq!(large.body.error.code, ErrorCode::TooLarge);
         assert_eq!(
@@ -579,10 +592,12 @@ mod tests {
     }
 
     #[test]
-    fn megabytes_rounds_to_one_decimal() {
-        assert_eq!(megabytes(10 * 1024 * 1024), "10 MB");
-        assert_eq!(megabytes(1024 * 1024 + 512 * 1024), "1.5 MB");
-        assert_eq!(megabytes(0), "0 MB");
+    fn format_size_rounds_to_one_decimal() {
+        assert_eq!(format_size(10 * 1024 * 1024), "10 MB");
+        assert_eq!(format_size(1024 * 1024 + 512 * 1024), "1.5 MB");
+        assert_eq!(format_size(512 * 1024), "512 KB");
+        assert_eq!(format_size(1536), "1.5 KB");
+        assert_eq!(format_size(0), "0 KB");
     }
 
     #[tokio::test]

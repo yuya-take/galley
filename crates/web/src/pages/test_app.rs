@@ -14,7 +14,9 @@ use galley_core::{
         },
         revision::{AddRevision, ListRevisions, RevertToRevision, RevisionInput},
     },
-    domain::{document::Document, revision::RevisionSource, shared::ProjectId},
+    domain::{
+        document::Document, revision::RevisionSource, shared::ProjectId, upload::HtmlSizeLimit,
+    },
 };
 
 use crate::{AppUrl, ViewerUrl, WebApp};
@@ -108,11 +110,22 @@ pub async fn new() -> TestApp {
             restore_document: RestoreDocument::new(documents.clone()),
             list_revisions: ListRevisions::new(revisions.clone()),
             revert_to_revision: RevertToRevision::new(documents.clone(), revisions.clone()),
-            create_document: CreateDocument::new(projects, documents.clone(), blobs.clone()),
-            add_revision: AddRevision::new(documents.clone(), revisions, blobs),
+            create_document: CreateDocument::new(
+                projects,
+                documents.clone(),
+                blobs.clone(),
+                HtmlSizeLimit::DEFAULT,
+            ),
+            add_revision: AddRevision::new(
+                documents.clone(),
+                revisions,
+                blobs,
+                HtmlSizeLimit::DEFAULT,
+            ),
             find_document_by_file_name: FindDocumentByFileName::new(documents.clone()),
             viewer_url: ViewerUrl::SameHost { port: 8081 },
             app_url: AppUrl::FromRequest,
+            html_size_limit: HtmlSizeLimit::DEFAULT,
         },
         archive_document: ArchiveDocument::new(documents),
     }

@@ -10,7 +10,7 @@ use crate::{
     app::{document::load, error::AppError},
     domain::{
         blob::BlobStore, document::DocumentRepository, revision::RevisionRepository,
-        shared::DocumentId,
+        shared::DocumentId, upload::HtmlSizeLimit,
     },
 };
 
@@ -19,6 +19,7 @@ pub struct AddRevision {
     documents: Arc<dyn DocumentRepository>,
     revisions: Arc<dyn RevisionRepository>,
     blobs: Arc<dyn BlobStore>,
+    limit: HtmlSizeLimit,
 }
 
 impl AddRevision {
@@ -26,11 +27,13 @@ impl AddRevision {
         documents: Arc<dyn DocumentRepository>,
         revisions: Arc<dyn RevisionRepository>,
         blobs: Arc<dyn BlobStore>,
+        limit: HtmlSizeLimit,
     ) -> Self {
         Self {
             documents,
             revisions,
             blobs,
+            limit,
         }
     }
 
@@ -42,7 +45,7 @@ impl AddRevision {
     ) -> Result<RegisteredRevision, AppError> {
         // 資料が無い・資料かプロジェクトがアーカイブ済みなら、HTML の検査とストレージへの書き込みの前に断る
         check_accepts_revisions(self.documents.as_ref(), document_id).await?;
-        let prepared = PreparedRevision::parse(input)?;
+        let prepared = PreparedRevision::parse(input, self.limit)?;
         let now = Timestamp::now();
         let blob = prepared.store(self.blobs.as_ref(), now).await?;
 

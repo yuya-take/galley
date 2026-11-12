@@ -22,7 +22,7 @@ use crate::domain::{
         AuthorName, NewRevision, Revision, RevisionMessage, RevisionRepository, RevisionSource,
     },
     shared::DocumentId,
-    upload::HtmlDocument,
+    upload::{HtmlDocument, HtmlSizeLimit},
 };
 
 use super::error::AppError;
@@ -62,10 +62,10 @@ pub(super) struct PreparedRevision {
 
 impl PreparedRevision {
     /// 入力を検査する。HTML の検査（外部リソースの検出）より先に、軽い検査を済ませる。
-    pub fn parse(input: RevisionInput) -> Result<Self, AppError> {
+    pub fn parse(input: RevisionInput, limit: HtmlSizeLimit) -> Result<Self, AppError> {
         let author_name = AuthorName::parse(&input.author_name)?;
         let message = RevisionMessage::parse(&input.message)?;
-        let html = HtmlDocument::parse(input.html)?;
+        let html = HtmlDocument::parse(input.html, limit)?;
         let html_title = html.title().map(str::to_owned);
         Ok(Self {
             content: BlobContent::new(html.into_bytes()),

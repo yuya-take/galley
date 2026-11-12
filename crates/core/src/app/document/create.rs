@@ -15,6 +15,7 @@ use crate::{
         error::RepositoryError,
         project::ProjectRepository,
         shared::ProjectId,
+        upload::HtmlSizeLimit,
     },
 };
 
@@ -33,6 +34,7 @@ pub struct CreateDocument {
     projects: Arc<dyn ProjectRepository>,
     documents: Arc<dyn DocumentRepository>,
     blobs: Arc<dyn BlobStore>,
+    limit: HtmlSizeLimit,
 }
 
 /// 同時に同じ slug の資料が作られたとき、slug を選び直す回数。
@@ -43,11 +45,13 @@ impl CreateDocument {
         projects: Arc<dyn ProjectRepository>,
         documents: Arc<dyn DocumentRepository>,
         blobs: Arc<dyn BlobStore>,
+        limit: HtmlSizeLimit,
     ) -> Self {
         Self {
             projects,
             documents,
             blobs,
+            limit,
         }
     }
 
@@ -58,7 +62,7 @@ impl CreateDocument {
     ) -> Result<RegisteredRevision, AppError> {
         let project = project::load(self.projects.as_ref(), input.project_id).await?;
         project.ensure_accepts_documents()?;
-        let prepared = PreparedRevision::parse(input.revision)?;
+        let prepared = PreparedRevision::parse(input.revision, self.limit)?;
         let title = DocumentTitle::for_new_document(
             input.title.as_deref(),
             prepared.html_title.as_deref(),

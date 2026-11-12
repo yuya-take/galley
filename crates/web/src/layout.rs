@@ -67,7 +67,11 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                 </div>
                 author_dialog(author: author.as_ref().map(|a| a.as_str()))
                 search_dialog()
-                upload::upload_dialogs(projects: &projects, author: author.as_ref().map(|a| a.as_str()))
+                upload::upload_dialogs(
+                    projects: &projects,
+                    author: author.as_ref().map(|a| a.as_str()),
+                    size_limit: app.html_size_limit,
+                )
             </body>
         </html>
     })

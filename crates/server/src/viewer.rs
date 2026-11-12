@@ -188,7 +188,7 @@ mod tests {
             project::{CreateProject, ProjectInput},
             revision::RevisionInput,
         },
-        domain::revision::RevisionSource,
+        domain::{revision::RevisionSource, upload::HtmlSizeLimit},
     };
     use http::Request;
     use http_body_util::BodyExt;
@@ -215,6 +215,7 @@ mod tests {
             Arc::new(database.projects()),
             Arc::new(database.documents()),
             blobs.clone(),
+            HtmlSizeLimit::DEFAULT,
         )
         .execute(CreateDocumentInput {
             project_id: project.id,
