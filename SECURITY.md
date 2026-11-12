@@ -4,7 +4,7 @@
 
 脆弱性を見つけた場合は、**公開の Issue には書かず**、GitHub の Private vulnerability reporting で報告してください。
 
-1. [Security タブ](https://github.com/yuya-take/galley/security) を開く
+1. [Security タブ](https://github.com/yuya-take/galley-docs/security) を開く
 2. 「Report a vulnerability」から報告する
 
 報告には、再現手順、影響の範囲、分かっていれば修正案を含めてください。受け取ったら、内容を確認して返信します。
