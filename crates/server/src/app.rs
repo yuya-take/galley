@@ -101,7 +101,7 @@ mod tests {
     use axum::{body::Body, http::StatusCode};
     use galley_core::{
         adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
-        app::project::{CreateProject, ProjectInput},
+        app::project::{ArchiveProject, CreateProject, ProjectInput},
     };
     use http::Request as HttpRequest;
     use http_body_util::BodyExt;
@@ -115,6 +115,8 @@ mod tests {
     struct Mcp {
         router: Router,
         session: Option<String>,
+        /// MCP の外から状態を変える（プロジェクトをアーカイブするなど）ときに使う。
+        database: SqliteDatabase,
     }
 
     impl Mcp {
@@ -148,6 +150,7 @@ mod tests {
             Ok(Self {
                 router,
                 session: None,
+                database,
             })
         }
 
@@ -391,6 +394,54 @@ mod tests {
             .await?;
         assert!(is_error);
         assert_eq!(text, "資料が見つかりません");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn update_in_archived_project_is_a_tool_error() -> TestResult {
+        let mcp = Mcp::connect(None).await?;
+        let (text, is_error) = mcp
+            .call(
+                "create_document",
+                json!({"project":"sales","title":"事業計画","html":HTML_V1,"slug":"plan"}),
+                &[AUTHOR],
+            )
+            .await?;
+        assert!(!is_error, "{text}");
+
+        // 資料はアーカイブせず、プロジェクトだけアーカイブする
+        let projects = Arc::new(mcp.database.projects());
+        let sales = FindProject::new(projects.clone()).execute("sales").await?;
+        ArchiveProject::new(projects).execute(sales.id).await?;
+
+        let (text, is_error) = mcp
+            .call(
+                "update_document",
+                json!({"project":"sales","document":"plan","html":HTML_V2,"message":"数字を更新"}),
+                &[AUTHOR],
+            )
+            .await?;
+        assert!(is_error, "{text}");
+        // AI が利用者に「プロジェクトをアーカイブから戻す」よう伝えられる文言
+        assert!(text.contains("アーカイブしたプロジェクト"), "{text}");
+        assert!(text.contains("新しい版の追加もできません"), "{text}");
+        assert!(
+            text.contains("プロジェクトをアーカイブから戻して"),
+            "{text}"
+        );
+
+        // 版は増えていない
+        let (text, is_error) = mcp
+            .call(
+                "get_document",
+                json!({"project":"sales","document":"plan"}),
+                &[],
+            )
+            .await?;
+        assert!(!is_error, "{text}");
+        let latest: Value = serde_json::from_str(&text)?;
+        assert_eq!(latest["latest_revision_number"], 1);
+        assert_eq!(latest["html"], HTML_V1);
         Ok(())
     }
 
