@@ -820,7 +820,12 @@ a.pill { text-decoration: none; }
 
 .connect code { font-family: var(--font-mono); font-size: 12px; }
 
+.connect p code { white-space: nowrap; }
+
 .connect .command { margin-top: 0; }
+
+/* 最後の名前まで見えるよう、手引きではコマンドを折り返す（コピーするのは data-copy-text の1行） */
+.connect .command > code { white-space: normal; overflow-wrap: anywhere; line-height: 1.7; }
 
 .command--block { align-items: flex-start; }
 

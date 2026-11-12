@@ -92,7 +92,7 @@ async fn token_section<'a>(mcp_url: &'a str, author: Option<&'a str>) -> Result<
             <p>
                 "サーバーの環境変数 " <code>"MCP_TOKEN"</code> " を設定している場合は、"
                 <code>(mcp_command::TOKEN_HEADER)</code> " ヘッダーでトークンを渡します。"
-                "コマンドの「<トークン>」を、管理者から聞いた値に置き換えてください。"
+                "コマンドの " <code>"<トークン>"</code> " を、管理者から聞いた値に置き換えてください。"
             </p>
             command_box(text: &command, label: "トークン付きで登録するコマンド")
             <p class="field-hint">"トークンが無い・違うときは、AI の接続が「401 Unauthorized」で断られます。"</p>
