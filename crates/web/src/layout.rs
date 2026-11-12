@@ -12,10 +12,12 @@ use topcoat::{
     view::{View, error_boundary, view},
 };
 
-use crate::{WebApp, author, fonts, search::search_dialog, sidebar::sidebar};
+use crate::{WebApp, author, fonts, search::search_dialog, sidebar::sidebar, upload};
 
 const APP_CSS: Asset = asset!("assets/app.css");
 const APP_JS: Asset = asset!("assets/app.js");
+const UPLOAD_CSS: Asset = asset!("assets/upload.css");
+const UPLOAD_JS: Asset = asset!("assets/upload.js");
 const FAVICON: Asset = asset!("assets/favicon.svg");
 
 #[layout("/")]
@@ -38,6 +40,8 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                 <link rel="stylesheet" href=(APP_CSS)>
                 topcoat::runtime::script()
                 <script src=(APP_JS) defer=""></script>
+                <link rel="stylesheet" href=(UPLOAD_CSS)>
+                <script src=(UPLOAD_JS) defer=""></script>
             </head>
             <body>
                 <div class="app">
@@ -63,6 +67,7 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                 </div>
                 author_dialog(author: author.as_ref().map(|a| a.as_str()))
                 search_dialog()
+                upload::upload_dialogs(projects: &projects, author: author.as_ref().map(|a| a.as_str()))
             </body>
         </html>
     })

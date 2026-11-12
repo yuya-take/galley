@@ -1,0 +1,288 @@
+/* 資料の登録（ドラッグ中の重ね表示、確認のダイアログ、登録できない資料のダイアログ）。
+   色は app.css のデザイントークンを使う。 */
+
+:root {
+  /* 「そのまま登録できます」。羊皮紙の上で WCAG AA（4.5:1）を満たす緑 */
+  --color-success: #2E6B4C;
+}
+
+/* ---- ドラッグ中：画面全体を受け皿にする。資料の iframe（別オリジン）より上に置いてドロップを受け止める ---- */
+
+.upload-drop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay);
+  outline: 3px dashed var(--color-gold);
+  outline-offset: -14px;
+}
+
+.upload-drop[hidden] { display: none; }
+
+/* 中の要素で dragenter / dragleave が細かく起きないようにする */
+.upload-drop > * { pointer-events: none; }
+
+.upload-drop-card {
+  width: min(480px, 100%);
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 14px;
+  box-shadow: var(--shadow-dialog), inset 0 0 0 1px var(--color-gold-ring-soft);
+}
+
+.upload-drop-card p { margin: 0; }
+
+.upload-drop-icon {
+  width: 60px;
+  height: 60px;
+  margin-bottom: 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-version-bg);
+  color: var(--color-version-text);
+}
+
+.upload-drop-title { font-family: var(--font-heading); font-size: 24px; font-weight: 700; color: var(--color-text); }
+
+.upload-drop-file { font-size: 14px; font-weight: 700; color: var(--color-text-soft); }
+
+.upload-drop-note { font-size: 13px; color: var(--color-text-muted); }
+
+/* ---- 確認のダイアログ「資料を登録」 ---- */
+
+.upload-dialog { width: min(560px, calc(100vw - 32px)); }
+
+.upload-dialog .dialog-body { max-height: calc(100vh - 48px); overflow-y: auto; }
+
+.upload-head { display: flex; flex-direction: column; gap: 4px; }
+
+.upload-head p:empty { display: none; }
+
+.upload-no-project {
+  padding: 10px 12px;
+  background: var(--color-version-bg);
+  border-radius: var(--radius);
+  color: var(--color-version-text);
+}
+
+.upload-dialog .dialog-body .upload-no-project { color: var(--color-version-text); }
+
+.upload-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--color-border-soft); }
+
+.upload-tab {
+  margin-bottom: -1px;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.upload-tab:hover { color: var(--color-text); }
+
+.upload-tab[aria-selected="true"] { border-bottom-color: var(--color-primary); color: var(--color-text); }
+
+.upload-tab:focus-visible { outline: 2px solid var(--color-gold); outline-offset: -2px; }
+
+.upload-panel { display: flex; flex-direction: column; gap: 6px; }
+
+.upload-panel[hidden] { display: none; }
+
+.upload-file {
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+}
+
+.upload-file[hidden] { display: none; }
+
+.upload-file--empty { border-style: dashed; border-color: var(--color-border); justify-content: space-between; }
+
+.upload-dialog .upload-file--empty p { color: var(--color-text-soft); }
+
+.upload-file-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  color: var(--color-text-soft);
+}
+
+.upload-file-body { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+
+.upload-dialog .upload-file-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-file-meta { font-size: 12px; color: var(--color-text-muted); }
+
+.upload-dialog p.upload-file-meta, .upload-rejected p.upload-file-meta { font-size: 12px; }
+
+/* .dialog-body p の文字色より優先する */
+.upload-dialog .upload-status { color: var(--color-success); font-weight: 700; }
+
+.upload-status:empty { display: none; }
+
+.upload-dialog .upload-status--error { color: var(--color-primary); }
+
+.upload-paste { min-height: 160px; font-family: var(--font-mono); font-size: 12px; line-height: 1.5; white-space: pre; }
+
+.upload-targets { margin: 0; padding: 0; border: none; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+
+.upload-targets legend { padding: 0; margin-bottom: 6px; font-size: 13px; font-weight: 700; }
+
+.upload-target {
+  min-height: 42px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--color-text-soft);
+  cursor: pointer;
+}
+
+.upload-target[hidden] { display: none; }
+
+.upload-target:hover { background: var(--color-bg); }
+
+.upload-target:has(input:checked) {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+  color: var(--color-text);
+}
+
+.upload-target:has(input:focus-visible) { outline: 2px solid var(--color-gold); outline-offset: 2px; }
+
+.upload-target input { margin: 0; accent-color: var(--color-primary); }
+
+.upload-target-body { flex-grow: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+
+.upload-target-title { font-weight: 700; }
+
+.upload-match { margin-top: 0; border-color: var(--color-gold); color: var(--color-gold-text); }
+
+.upload-match[hidden] { display: none; }
+
+.upload-other { padding-left: 12px; display: flex; flex-direction: column; gap: 6px; }
+
+.upload-other[hidden] { display: none; }
+
+.upload-other-list {
+  max-height: 180px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius);
+}
+
+.upload-other-list:empty { display: none; }
+
+.upload-other-item {
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.upload-other-list li + li .upload-other-item { border-top: 1px solid var(--color-border-soft); }
+
+.upload-other-item:hover { background: var(--color-bg); }
+
+.upload-other-item:has(input:checked) { background: var(--color-row-selected); }
+
+.upload-other-item input { margin: 0; accent-color: var(--color-primary); }
+
+.upload-other-title { flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.upload-dialog .field[hidden] { display: none; }
+
+.upload-dialog .field-hint[hidden] { display: none; }
+
+/* ---- 登録できない資料のダイアログ ---- */
+
+.upload-rejected { width: min(680px, calc(100vw - 32px)); }
+
+.upload-rejected .dialog-body { max-height: calc(100vh - 48px); overflow-y: auto; }
+
+.upload-rejected h2 { color: var(--color-primary); }
+
+.upload-rejected strong { color: var(--color-text); }
+
+.upload-findings-wrap {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius);
+}
+
+.upload-findings { width: 100%; border-collapse: collapse; font-size: 12px; }
+
+.upload-findings th {
+  position: sticky;
+  top: 0;
+  padding: 7px 10px;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border-soft);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.upload-findings td { padding: 7px 10px; vertical-align: top; border-bottom: 1px solid var(--color-border-soft); }
+
+.upload-findings tbody tr:last-child td { border-bottom: none; }
+
+.upload-findings-line { font-family: var(--font-mono); color: var(--color-text-muted); text-align: right; white-space: nowrap; }
+
+.upload-findings-kind { white-space: nowrap; }
+
+.upload-findings code { font-family: var(--font-mono); font-size: 12px; color: var(--color-text); word-break: break-all; }
+
+.upload-ai {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--color-bg);
+  border-left: 3px solid var(--color-gold);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.upload-ai h3 { margin: 0; font-size: 14px; }
+
+.upload-rejected .upload-ai-text { font-size: 13px; line-height: 1.7; color: var(--color-text); }

@@ -6,8 +6,8 @@ use galley_core::{
     adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
     app::{
         document::{
-            ArchiveDocument, CreateDocument, CreateDocumentInput, FindDocument, ListDocuments,
-            RestoreDocument, SlugSource,
+            ArchiveDocument, CreateDocument, CreateDocumentInput, FindDocument,
+            FindDocumentByFileName, ListDocuments, RestoreDocument, SlugSource,
         },
         project::{
             ArchiveProject, CreateProject, FindProject, ListProjects, RestoreProject, UpdateProject,
@@ -21,8 +21,6 @@ use crate::{AppUrl, ViewerUrl, WebApp};
 
 pub struct TestApp {
     web: WebApp,
-    create_document: CreateDocument,
-    add_revision: AddRevision,
     archive_document: ArchiveDocument,
 }
 
@@ -110,11 +108,12 @@ pub async fn new() -> TestApp {
             restore_document: RestoreDocument::new(documents.clone()),
             list_revisions: ListRevisions::new(revisions.clone()),
             revert_to_revision: RevertToRevision::new(documents.clone(), revisions.clone()),
+            create_document: CreateDocument::new(projects, documents.clone(), blobs.clone()),
+            add_revision: AddRevision::new(documents.clone(), revisions, blobs),
+            find_document_by_file_name: FindDocumentByFileName::new(documents.clone()),
             viewer_url: ViewerUrl::SameHost { port: 8081 },
             app_url: AppUrl::FromRequest,
         },
-        create_document: CreateDocument::new(projects, documents.clone(), blobs.clone()),
-        add_revision: AddRevision::new(documents.clone(), revisions, blobs),
         archive_document: ArchiveDocument::new(documents),
     }
 }

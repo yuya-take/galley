@@ -293,8 +293,14 @@ async fn viewer_screen<'a>(
                             title="HTML をダウンロード"
                         >(Unescaped::new_unchecked(DOWNLOAD_SVG))</a>
                     }
-                    // 登録の流れは #17 で作る
-                    <button type="button" class="button button--primary" aria-disabled="true" title="登録は準備中です">"新しい版を登録"</button>
+                    // この資料の新しい版として登録するダイアログを開く（`crate::upload`）
+                    <button
+                        type="button"
+                        class="button button--primary"
+                        data-action="open-upload"
+                        data-upload-project=(project.slug.as_str())
+                        data-upload-document=(viewer.document.slug.as_str())
+                    >"新しい版を登録"</button>
                 </div>
             </header>
             if !viewer.is_latest() {

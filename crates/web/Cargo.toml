@@ -12,11 +12,13 @@ publish.workspace = true
 galley-core.workspace = true
 http.workspace = true
 jiff.workspace = true
+serde.workspace = true
 thiserror.workspace = true
 topcoat = { workspace = true, features = ["asset", "font", "font-fontsource", "router", "runtime", "serve", "tower", "view"] }
 tracing.workspace = true
 
 [dev-dependencies]
+serde_json.workspace = true
 tokio.workspace = true
 
 [lints]

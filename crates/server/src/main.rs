@@ -20,11 +20,14 @@ use axum::Router;
 use galley_core::{
     adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
     app::{
-        document::{FindDocument, FindDocumentById, ListDocuments, RestoreDocument},
+        document::{
+            CreateDocument, FindDocument, FindDocumentByFileName, FindDocumentById, ListDocuments,
+            RestoreDocument,
+        },
         project::{
             ArchiveProject, CreateProject, FindProject, ListProjects, RestoreProject, UpdateProject,
         },
-        revision::{ListRevisions, ReadRevisionContent, RevertToRevision},
+        revision::{AddRevision, ListRevisions, ReadRevisionContent, RevertToRevision},
     },
 };
 use galley_web::{AppUrl, ViewerUrl};
@@ -72,12 +75,22 @@ async fn main() -> anyhow::Result<()> {
         create_project: CreateProject::new(projects.clone()),
         update_project: UpdateProject::new(projects.clone()),
         archive_project: ArchiveProject::new(projects.clone()),
-        restore_project: RestoreProject::new(projects),
+        restore_project: RestoreProject::new(projects.clone()),
         list_documents: ListDocuments::new(documents.clone()),
         find_document: FindDocument::new(documents.clone()),
         restore_document: RestoreDocument::new(documents.clone()),
         list_revisions: ListRevisions::new(Arc::new(database.revisions())),
-        revert_to_revision: RevertToRevision::new(documents, Arc::new(database.revisions())),
+        revert_to_revision: RevertToRevision::new(
+            documents.clone(),
+            Arc::new(database.revisions()),
+        ),
+        create_document: CreateDocument::new(projects, documents.clone(), blobs.clone()),
+        add_revision: AddRevision::new(
+            documents.clone(),
+            Arc::new(database.revisions()),
+            blobs.clone(),
+        ),
+        find_document_by_file_name: FindDocumentByFileName::new(documents),
         viewer_url,
         app_url: app_url.clone(),
     }))?;
