@@ -174,10 +174,7 @@ pub async fn project_documents(cx: &Cx) -> Result<impl View> {
     let now = date::now();
     let rows = Rows::load(app, &params, Some(project.id), author.as_ref(), &now).await?;
     let path = format!("/{}", project.slug);
-    let mcp_url = app
-        .app_url
-        .mcp_url(host(cx))
-        .unwrap_or_else(|| "http://<アプリのホスト>/mcp".to_owned());
+    let mcp_url = mcp_command::url(&app.app_url, host(cx));
     let command = mcp_command::claude_code(&mcp_url, author.as_ref().map(AuthorName::as_str));
     let empty = Empty::Project {
         name: project.name.to_string(),
