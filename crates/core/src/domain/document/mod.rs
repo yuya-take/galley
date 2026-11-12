@@ -20,11 +20,13 @@ use crate::domain::{
     shared::{DocumentId, ProjectId, RevisionId},
 };
 
-/// 資料に版を追加できないとき。
+/// 資料に版を追加できない・資料をアーカイブできないとき。
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DocumentError {
     #[error("アーカイブした資料には版を追加できません。先にアーカイブから戻してください")]
     Archived,
+    #[error("この資料はすでにアーカイブしています")]
+    AlreadyArchived,
     #[error("第{0}版は最新の版なので、戻せません")]
     AlreadyLatest(RevisionNumber),
     /// 渡された版が、この資料の現在版や版ではない（呼び出し側の誤り）。
@@ -167,9 +169,13 @@ impl Document {
         self.archived_at.is_some()
     }
 
-    /// アーカイブする。すでにアーカイブ済みなら日時を変えない。
-    pub fn archive(&mut self, now: Timestamp) {
-        self.archived_at.get_or_insert(now);
+    /// アーカイブする。アーカイブ済みの資料はアーカイブできない（アーカイブした日時を変えない）。
+    pub fn archive(&mut self, now: Timestamp) -> Result<(), DocumentError> {
+        if self.is_archived() {
+            return Err(DocumentError::AlreadyArchived);
+        }
+        self.archived_at = Some(now);
+        Ok(())
     }
 
     pub fn restore(&mut self) {
@@ -265,7 +271,9 @@ mod tests {
     #[test]
     fn add_revision_rejects_archived_document() {
         let (mut document, first) = new_document();
-        document.archive(Timestamp::from_second(150).unwrap());
+        document
+            .archive(Timestamp::from_second(150).unwrap())
+            .unwrap();
         assert_eq!(
             document.add_revision(
                 &first,
@@ -360,11 +368,25 @@ mod tests {
             now,
         );
         document.rename(DocumentTitle::parse("事業計画 2026").unwrap());
-        document.archive(Timestamp::from_second(200).unwrap());
+        document
+            .archive(Timestamp::from_second(200).unwrap())
+            .unwrap();
         assert!(document.is_archived());
         assert_eq!(document.updated_at, now);
 
         document.restore();
         assert!(!document.is_archived());
+    }
+
+    #[test]
+    fn archive_rejects_archived_document() {
+        let (mut document, _) = new_document();
+        let first = Timestamp::from_second(200).unwrap();
+        document.archive(first).unwrap();
+        assert_eq!(
+            document.archive(Timestamp::from_second(300).unwrap()),
+            Err(DocumentError::AlreadyArchived)
+        );
+        assert_eq!(document.archived_at, Some(first));
     }
 }

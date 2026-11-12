@@ -16,13 +16,18 @@ pub use text::{
 
 use crate::domain::shared::ProjectId;
 
-/// プロジェクトに資料を登録できない・資料に版を追加できないとき。
+/// プロジェクトに資料を登録できない・資料に版を追加できない・資料をアーカイブできないとき。
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ProjectError {
     #[error(
         "アーカイブしたプロジェクトには、資料の登録も新しい版の追加もできません。先にプロジェクトをアーカイブから戻してください"
     )]
     Archived,
+    /// アーカイブしたプロジェクトの資料を、1件ずつアーカイブしようとした。
+    #[error(
+        "アーカイブしたプロジェクトの資料は、1件ずつはアーカイブできません。プロジェクトごとアーカイブしてあるので、資料はすでに一覧に出ていません"
+    )]
+    ArchivedWithDocuments,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,6 +95,14 @@ impl Project {
         Ok(())
     }
 
+    /// 資料を1件ずつアーカイブできるか。アーカイブしたプロジェクトでは、資料はプロジェクトごと一覧に出ていないので断る。
+    pub fn ensure_documents_archivable(&self) -> Result<(), ProjectError> {
+        if self.is_archived() {
+            return Err(ProjectError::ArchivedWithDocuments);
+        }
+        Ok(())
+    }
+
     /// アーカイブする。すでにアーカイブ済みなら日時を変えない。
     pub fn archive(&mut self, now: Timestamp) {
         self.archived_at.get_or_insert(now);
@@ -148,6 +161,18 @@ mod tests {
 
         project.restore();
         assert_eq!(project.ensure_accepts_documents(), Ok(()));
+    }
+
+    #[test]
+    fn archived_project_rejects_archiving_documents() {
+        let mut project = Project::create(profile("sales"), Timestamp::UNIX_EPOCH);
+        assert_eq!(project.ensure_documents_archivable(), Ok(()));
+
+        project.archive(Timestamp::from_second(100).unwrap());
+        assert_eq!(
+            project.ensure_documents_archivable(),
+            Err(ProjectError::ArchivedWithDocuments)
+        );
     }
 
     #[test]
