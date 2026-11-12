@@ -39,7 +39,7 @@ crates/core/src/
 │   ├── document/      mod.rs、slug.rs、title.rs、query.rs（一覧の条件）、repository.rs
 │   ├── revision/      mod.rs、text.rs（更新者名、変更メモ）、repository.rs
 │   ├── blob/          mod.rs（BlobHash、BlobContent）、store.rs（BlobStore）
-│   ├── upload/        mod.rs（HtmlDocument、UploadError）、scan.rs（HTML）、css.rs、script.rs、url.rs、resource.rs
+│   ├── upload/        mod.rs（HtmlDocument、UploadError）、limit.rs（HtmlSizeLimit）、scan.rs（HTML）、css.rs、script.rs、url.rs、resource.rs
 │   └── error.rs       RepositoryError、StorageError
 ├── app/
 │   ├── error.rs       AppError

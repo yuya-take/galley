@@ -47,6 +47,7 @@ docker run -d --name galley --restart unless-stopped \
 | `TZ` | `UTC` | 画面に出す日時のタイムゾーン（例：`Asia/Tokyo`） |
 | `GALLEY_DATA_DIR` | `/data` | DB（`galley.db`）と資料の実体（`blobs/`）を置くディレクトリ |
 | `GALLEY_BLOB_STORE` | なし（`/data/blobs` に置く） | `s3://<バケット>/<プレフィックス>` を指定すると、資料の実体を S3 互換のストレージに置きます。認証情報などは `AWS_ACCESS_KEY_ID`・`AWS_SECRET_ACCESS_KEY`・`AWS_REGION`・`AWS_ENDPOINT`（MinIO などのとき）で渡します。`http://` のエンドポイントには `AWS_ALLOW_HTTP=true` も要ります |
+| `GALLEY_MAX_HTML_SIZE` | `10MB` | 1ファイル（HTML）のサイズ上限。`20MB`・`512KB` のように KB か MB を付けて書きます（1MB = 1024KB）。100MB まで |
 | `GALLEY_APP_ADDR` | `0.0.0.0:8080` | アプリの待ち受けアドレス |
 | `GALLEY_VIEWER_ADDR` | `0.0.0.0:8081` | 資料配信の待ち受けアドレス（アプリと別のポートにします） |
 | `RUST_LOG` | `info` | ログの詳しさ（`debug` など） |
