@@ -42,11 +42,19 @@ impl ViewerUrl {
     /// 版の HTML の URL。`app_host` はアプリへのリクエストの Host ヘッダー（`SameHost` のときに使う）。
     /// Host ヘッダーがホスト名として正しくなければ `None`。
     pub fn revision_url(&self, app_host: &str, id: RevisionId) -> Option<String> {
-        let base = match self {
-            Self::Fixed(base) => base.clone(),
-            Self::SameHost { port } => format!("http://{}:{port}", hostname(app_host)?),
-        };
-        Some(format!("{base}/r/{id}"))
+        Some(format!("{}/r/{id}", self.base(app_host)?))
+    }
+
+    /// 版の HTML をファイルとしてダウンロードする URL（資料ビューアの「HTML をダウンロード」）。
+    pub fn download_url(&self, app_host: &str, id: RevisionId) -> Option<String> {
+        Some(format!("{}/r/{id}/download", self.base(app_host)?))
+    }
+
+    fn base(&self, app_host: &str) -> Option<String> {
+        match self {
+            Self::Fixed(base) => Some(base.clone()),
+            Self::SameHost { port } => Some(format!("http://{}:{port}", hostname(app_host)?)),
+        }
     }
 }
 
@@ -87,6 +95,10 @@ mod tests {
             url.revision_url("Galley.Internal:8080", id),
             Some(format!("http://galley.internal:8081/r/{id}"))
         );
+        assert_eq!(
+            url.download_url("galley.internal:8080", id),
+            Some(format!("http://galley.internal:8081/r/{id}/download"))
+        );
     }
 
     #[test]
@@ -94,6 +106,7 @@ mod tests {
         let url = ViewerUrl::SameHost { port: 8081 };
         for host in ["", "evil.com/x", "a b", "\"><script>", "[::1"] {
             assert_eq!(url.revision_url(host, id()), None, "{host:?}");
+            assert_eq!(url.download_url(host, id()), None, "{host:?}");
         }
     }
 

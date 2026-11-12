@@ -203,9 +203,9 @@ mod tests {
         let app = test_app::new().await;
         let sales = project(&app, "sales", "営業企画").await;
         let old = project(&app, "old", "旧プロジェクト").await;
-        app.document(sales.id, "提案書").await;
+        app.document(sales.id, "proposal", "提案書", 1).await;
         app.archived_document(sales.id, "古い見積").await;
-        app.document(old.id, "議事録").await;
+        app.document(old.id, "minutes", "議事録", 1).await;
         app.archive_project
             .execute(old.id)
             .await
@@ -224,8 +224,8 @@ mod tests {
     async fn candidates_keep_the_newest_up_to_the_limit() -> TestResult {
         let app = test_app::new().await;
         let sales = project(&app, "sales", "営業企画").await;
-        for title in ["一", "二", "三"] {
-            app.document(sales.id, title).await;
+        for (slug, title) in [("one", "一"), ("two", "二"), ("three", "三")] {
+            app.document(sales.id, slug, title, 1).await;
         }
 
         let candidates = Candidates::load(&app, 2).await.map_err(|e| e.to_string())?;
