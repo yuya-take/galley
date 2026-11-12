@@ -16,6 +16,7 @@ enum Current<'a> {
     All,
     Mine,
     Archive,
+    Connect,
     Project(&'a str),
     Other,
 }
@@ -30,7 +31,8 @@ impl<'a> Current<'a> {
             "" if is_mine => Self::Mine,
             "" => Self::All,
             "/archive" => Self::Archive,
-            "/connect" | "/new" => Self::Other,
+            "/connect" => Self::Connect,
+            "/new" => Self::Other,
             other => other
                 .trim_start_matches('/')
                 .split('/')
@@ -81,7 +83,7 @@ pub async fn sidebar(
                 </label>
                 project_list(projects: projects, current: current)
             </div>
-            <a class="connect-link" href="/connect">
+            <a class="connect-link" href="/connect" aria-current=(aria_current(current == Current::Connect))>
                 (Unescaped::new_unchecked(CONNECT_SVG))
                 <span>
                     <strong>"AIから登録する"</strong>
@@ -169,6 +171,7 @@ mod tests {
             Current::of("/sales/plan/v/2", None),
             Current::Project("sales")
         );
-        assert_eq!(Current::of("/connect", None), Current::Other);
+        assert_eq!(Current::of("/connect", None), Current::Connect);
+        assert_eq!(Current::of("/new", None), Current::Other);
     }
 }
