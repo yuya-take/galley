@@ -25,6 +25,22 @@ pub fn short(at: Timestamp, now: &Zoned) -> String {
     }
 }
 
+/// 日付と時刻（「9月20日 18:40」。年が違えば「2025年12月31日 12:00」）。過去の版の帯に使う。
+pub fn medium(at: Timestamp, now: &Zoned) -> String {
+    let zoned = at.to_zoned(now.time_zone().clone());
+    if zoned.year() == now.year() {
+        format!(
+            "{}月{}日 {:02}:{:02}",
+            zoned.month(),
+            zoned.day(),
+            zoned.hour(),
+            zoned.minute()
+        )
+    } else {
+        long(at, now.time_zone())
+    }
+}
+
 /// 詳しい日時（「2026年9月19日 14:10」）。マウスを載せたときの表示に使う。
 pub fn long(at: Timestamp, time_zone: &TimeZone) -> String {
     let at = at.to_zoned(time_zone.clone());
@@ -89,6 +105,17 @@ mod tests {
             .parse()
             .unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(short(at, &now), "今日 08:30");
+    }
+
+    #[test]
+    fn medium_shows_date_and_time() {
+        let now = tokyo("2026-09-21T10:00:00");
+        assert_eq!(medium(at("2026-09-20T18:40:00"), &now), "9月20日 18:40");
+        assert_eq!(medium(at("2026-09-21T09:05:00"), &now), "9月21日 09:05");
+        assert_eq!(
+            medium(at("2025-12-31T12:00:00"), &now),
+            "2025年12月31日 12:00"
+        );
     }
 
     #[test]

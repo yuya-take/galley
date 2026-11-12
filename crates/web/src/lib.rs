@@ -20,7 +20,7 @@ use galley_core::{
         project::{
             ArchiveProject, CreateProject, FindProject, ListProjects, RestoreProject, UpdateProject,
         },
-        revision::ListRevisions,
+        revision::{ListRevisions, RevertToRevision},
     },
     domain::{project::ProjectSummary, shared::ArchiveFilter},
 };
@@ -52,6 +52,8 @@ pub struct WebApp {
     pub find_document: FindDocument,
     pub restore_document: RestoreDocument,
     pub list_revisions: ListRevisions,
+    /// 資料ビューアの「この版に戻す」。
+    pub revert_to_revision: RevertToRevision,
     /// プレビューの iframe に入れる資料配信の URL。
     pub viewer_url: ViewerUrl,
     /// アプリの URL（空のプロジェクトに出す MCP の登録コマンド、URL の欄の前の「<ホスト>/」）。
@@ -85,6 +87,8 @@ fn routes(builder: RouterBuilder) -> RouterBuilder {
         .page(pages::documents::all_documents)
         .page(pages::documents::project_documents)
         .route(pages::documents::document_preview)
+        .page(pages::viewer::document_viewer)
+        .page(pages::viewer::revision_viewer)
         .page(pages::not_found)
         .page(pages::new_project::new_project)
         .page(pages::project_settings::project_settings)
@@ -94,6 +98,7 @@ fn routes(builder: RouterBuilder) -> RouterBuilder {
         .route(pages::project_settings::archive_project)
         .route(pages::archive::restore_project)
         .route(pages::archive::restore_document)
+        .route(pages::viewer::revert_to_revision)
 }
 
 #[cfg(test)]
