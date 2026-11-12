@@ -1135,3 +1135,47 @@ a.archive-title:hover { text-decoration: underline; }
   .viewer-bar { flex-wrap: wrap; }
   .viewer-actions { margin-left: 0; }
 }
+
+/* ---- 版の履歴（#16） ----
+   表とプレビュー欄の骨組みは資料の一覧（.documents、.documents-table、.preview）を使い回す */
+
+/* 「何を変えたか」が主な内容なので、ほかの列を資料の一覧より狭くする */
+.history-table .col-version { width: 80px; }
+.history-table .col-author { width: 120px; }
+.history-table .col-updated { width: 104px; }
+
+/* 行を選ぶボタンは版の表記だけなので、資料名の書体にしない */
+.revision-select { font-family: var(--font-body); }
+
+/* 変更メモは省略せずに折り返し、印が入らなければ次の行に送る */
+.revision-change { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; }
+.revision-change-message { min-width: 0; overflow-wrap: anywhere; }
+.revision-change-message--empty, .history-memo--empty { color: var(--color-text-muted); }
+
+/* 「戻した版」の印 */
+.restored {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--color-text-soft);
+  white-space: nowrap;
+}
+
+/* プレビュー欄：変更メモ、版・更新者・日時、操作 */
+.history-memo { font-size: 17px; overflow-wrap: anywhere; }
+.history-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 13px;
+}
+.history-facts > div { display: contents; }
+.history-facts dt { font-size: 12px; color: var(--color-text-muted); }
+.history-facts dd { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.history-actions { padding-top: 12px; display: flex; gap: 8px; border-top: 1px solid var(--color-border-soft); }
+.history-actions > .button { flex: 1 1 0; }
+.history-note { margin: 0; font-size: 12px; color: var(--color-text-muted); }

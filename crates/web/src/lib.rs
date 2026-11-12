@@ -89,6 +89,8 @@ fn routes(builder: RouterBuilder) -> RouterBuilder {
         .route(pages::documents::document_preview)
         .page(pages::viewer::document_viewer)
         .page(pages::viewer::revision_viewer)
+        .page(pages::history::revision_history)
+        .route(pages::history::revision_preview)
         .page(pages::not_found)
         .page(pages::new_project::new_project)
         .page(pages::project_settings::project_settings)
