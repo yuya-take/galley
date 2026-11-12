@@ -1470,6 +1470,7 @@ dependencies = [
  "galley-web",
  "http",
  "http-body-util",
+ "jiff",
  "rmcp",
  "serde",
  "serde_json",
