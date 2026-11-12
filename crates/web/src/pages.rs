@@ -1,6 +1,7 @@
 //! 画面。画面ごとにモジュールを分ける。資料を読む（#15）などはそれぞれの Issue で作る。
 
 pub mod archive;
+pub mod connect;
 pub mod documents;
 pub mod new_project;
 mod project_form;

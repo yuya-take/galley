@@ -89,6 +89,7 @@ fn routes(builder: RouterBuilder) -> RouterBuilder {
         .page(pages::new_project::new_project)
         .page(pages::project_settings::project_settings)
         .page(pages::archive::archive)
+        .page(pages::connect::connect)
         .route(pages::new_project::create_project)
         .route(pages::project_settings::update_project)
         .route(pages::project_settings::archive_project)
