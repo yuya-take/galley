@@ -410,7 +410,9 @@ mod tests {
                 Timestamp::from_second(200).unwrap(),
             )
             .unwrap();
-        document.archive(Timestamp::from_second(300).unwrap());
+        document
+            .archive(Timestamp::from_second(300).unwrap())
+            .unwrap();
         assert_eq!(document.ensure_can_purge_revision(&first), Ok(()));
     }
 
