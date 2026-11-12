@@ -21,8 +21,8 @@ use galley_core::{
     adapter::{blob_store::ObjectStoreBlobStore, sqlite::SqliteDatabase},
     app::{
         document::{
-            CreateDocument, FindDocument, FindDocumentByFileName, FindDocumentById, ListDocuments,
-            RestoreDocument,
+            ArchiveDocument, CreateDocument, FindDocument, FindDocumentByFileName,
+            FindDocumentById, ListDocuments, RestoreDocument,
         },
         project::{
             ArchiveProject, CreateProject, FindProject, ListProjects, RestoreProject, UpdateProject,
@@ -78,6 +78,7 @@ async fn main() -> anyhow::Result<()> {
         restore_project: RestoreProject::new(projects.clone()),
         list_documents: ListDocuments::new(documents.clone()),
         find_document: FindDocument::new(documents.clone()),
+        archive_document: ArchiveDocument::new(documents.clone()),
         restore_document: RestoreDocument::new(documents.clone()),
         list_revisions: ListRevisions::new(Arc::new(database.revisions())),
         revert_to_revision: RevertToRevision::new(

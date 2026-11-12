@@ -21,7 +21,6 @@ use crate::{AppUrl, ViewerUrl, WebApp};
 
 pub struct TestApp {
     web: WebApp,
-    archive_document: ArchiveDocument,
 }
 
 impl Deref for TestApp {
@@ -105,15 +104,15 @@ pub async fn new() -> TestApp {
             restore_project: RestoreProject::new(projects.clone()),
             list_documents: ListDocuments::new(documents.clone()),
             find_document: FindDocument::new(documents.clone()),
+            archive_document: ArchiveDocument::new(documents.clone()),
             restore_document: RestoreDocument::new(documents.clone()),
             list_revisions: ListRevisions::new(revisions.clone()),
             revert_to_revision: RevertToRevision::new(documents.clone(), revisions.clone()),
             create_document: CreateDocument::new(projects, documents.clone(), blobs.clone()),
             add_revision: AddRevision::new(documents.clone(), revisions, blobs),
-            find_document_by_file_name: FindDocumentByFileName::new(documents.clone()),
+            find_document_by_file_name: FindDocumentByFileName::new(documents),
             viewer_url: ViewerUrl::SameHost { port: 8081 },
             app_url: AppUrl::FromRequest,
         },
-        archive_document: ArchiveDocument::new(documents),
     }
 }

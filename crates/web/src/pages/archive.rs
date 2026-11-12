@@ -1,14 +1,17 @@
 //! アーカイブ（`/archive`）。アーカイブしたプロジェクトと資料の一覧と、元に戻す操作。
 //!
 //! キャンバスに無い画面なので、資料一覧と同じ表の形で作る。
+//!
+//! 資料を1件ずつアーカイブする操作（一覧のプレビュー欄と資料ビューアの「アーカイブ」、確かめる段階、
+//! アーカイブした直後の通知）もここに置く。
 
 use std::{cmp::Reverse, collections::HashSet, sync::Arc};
 
 use galley_core::{
     app::error::AppError,
     domain::{
-        document::{DocumentListItem, DocumentQuery},
-        project::ProjectSummary,
+        document::{Document, DocumentListItem, DocumentQuery, DocumentSlug},
+        project::{Project, ProjectSlug, ProjectSummary},
         shared::{ArchiveFilter, DocumentId, ProjectId},
     },
 };
@@ -17,11 +20,14 @@ use topcoat::{
     Result,
     context::{Cx, app_context},
     router::page,
-    runtime::{Event, procedure, signal},
+    runtime::{Event, Signal, procedure, signal},
     view::{Unescaped, View, component, view},
 };
 
-use super::project_form::{self, form_error};
+use super::{
+    documents::found,
+    project_form::{self, form_error},
+};
 use crate::{WebApp, author, date, icon};
 
 #[page("/archive")]
@@ -286,6 +292,176 @@ async fn restore_document_by_id(app: &WebApp, id: &str) -> Result<(), String> {
         .map_err(project_form::error_message)
 }
 
+/// 資料をアーカイブする前に出す説明。
+const ARCHIVE_NOTE: &str =
+    "アーカイブした資料は一覧に出なくなります。アーカイブの画面から戻せます。";
+
+/// そのほかの操作のメニューの「アーカイブ」。押すと確認（[`archive_confirm`]）を出し、フォーカスを確認の
+/// 「やめる」に移す（メニューを閉じるのは `assets/app.js`）。`key` は `<プロジェクト>/<資料>`。
+#[component]
+pub(super) async fn archive_menu_item<'a>(
+    key: String,
+    confirming: &'a Signal<String>,
+) -> Result<impl View> {
+    Ok(view! {
+        <button
+            type="button"
+            class="menu-item"
+            @click=$(|_e: Event| {
+                confirming.set(key.to_owned());
+                raw!("requestAnimationFrame(() => document.querySelector('[data-archive-confirm]:not([hidden]) button')?.focus())");
+            })
+        >"アーカイブ"</button>
+    })
+}
+
+/// 資料をアーカイブする前の確認（「『提案書』をアーカイブしますか？」と、戻せることの説明）。
+/// `confirming` が `<プロジェクト>/<資料>` のときだけ出す（プレビュー欄で別の行を選んだら隠れる）。
+/// アーカイブしたら、通知付きのプロジェクトの資料一覧に移る。`class` は置く場所の見た目。
+#[component]
+pub(super) async fn archive_confirm<'a>(
+    cx: &'a Cx,
+    class: &'a str,
+    project: String,
+    document: String,
+    title: &'a str,
+    confirming: &'a Signal<String>,
+) -> Result<impl View> {
+    let key = format!("{project}/{document}");
+    let is_busy = signal(cx, || false);
+    let error = signal(cx, String::new);
+    Ok(view! {
+        <section
+            class=(format!("archive-confirm {class}"))
+            aria-label="アーカイブの確認"
+            data-archive-confirm=""
+            :hidden=$(confirming.get() != key)
+        >
+            <p class="archive-confirm-text">
+                <strong>(format!("「{title}」をアーカイブしますか？"))</strong>
+                " "
+                (ARCHIVE_NOTE)
+            </p>
+            <div class="archive-confirm-actions">
+                <button
+                    type="button"
+                    class="button button--outline button--small"
+                    :disabled=$(is_busy.get())
+                    @click=$(|_e: Event| {
+                        confirming.set("".to_owned());
+                        error.set("".to_owned());
+                    })
+                >"やめる"</button>
+                <button
+                    type="button"
+                    class="button button--primary button--small"
+                    :disabled=$(is_busy.get())
+                    @click=$(async |_e: Event| {
+                        is_busy.set(true);
+                        error.set("".to_owned());
+                        let result = archive_document(project, document).await;
+                        if result.is_ok() {
+                            // 移るまでボタンは押せないままにする
+                            let url = result.unwrap();
+                            raw!("location.assign(${url})", drop(url));
+                        } else {
+                            is_busy.set(false);
+                            error.set(result.unwrap_err());
+                        }
+                    })
+                >"アーカイブする"</button>
+            </div>
+            form_error(error: &error)
+        </section>
+    })
+}
+
+/// 資料をアーカイブする。成功したらプロジェクトの資料一覧の URL（アーカイブした直後の通知付き）、
+/// 失敗したら画面に出す文言を返す。
+#[procedure]
+pub async fn archive_document(
+    cx: &Cx,
+    project: String,
+    document: String,
+) -> Result<Result<String, String>> {
+    let app: &Arc<WebApp> = app_context(cx);
+    Ok(archive_document_by_slug(app, &project, &document).await)
+}
+
+async fn archive_document_by_slug(
+    app: &WebApp,
+    project_slug: &str,
+    document_slug: &str,
+) -> Result<String, String> {
+    // アーカイブしたプロジェクト・資料も探し、断る理由（core の文言）をそのまま出す
+    let project = app
+        .find_project
+        .execute(project_slug)
+        .await
+        .map_err(project_form::error_message)?;
+    let document = app
+        .find_document
+        .execute(project.id, document_slug)
+        .await
+        .map_err(project_form::error_message)?;
+    let archived = app
+        .archive_document
+        .execute(document.id)
+        .await
+        .map_err(project_form::error_message)?;
+    Ok(archived_path(&project.slug, &archived.slug))
+}
+
+/// アーカイブした直後に開く資料一覧の URL（`/<プロジェクト>?archived=<資料>`）。開くと通知を出す。
+fn archived_path(project: &ProjectSlug, document: &DocumentSlug) -> String {
+    format!("/{project}?archived={document}")
+}
+
+/// `?archived=<資料の slug>` の資料。このプロジェクトの資料で、いまアーカイブしてあるときだけ返す
+/// （戻したあとの URL や、ほかのプロジェクトの資料では通知を出さない）。
+pub(super) async fn archived_notice(
+    app: &WebApp,
+    project: &Project,
+    slug: Option<&str>,
+) -> Result<Option<Document>, AppError> {
+    let Some(slug) = slug else {
+        return Ok(None);
+    };
+    Ok(found(app.find_document.execute(project.id, slug).await)?.filter(Document::is_archived))
+}
+
+/// アーカイブした直後の通知（プロジェクトの資料一覧）。「元に戻す」で戻して読み込み直す。
+/// 「閉じる」と、URL から `?archived=` を消す処理は `assets/app.js`（`data-notice`）。
+#[component]
+pub(super) async fn archived_toast<'a>(cx: &'a Cx, document: &'a Document) -> Result<impl View> {
+    let is_busy = signal(cx, || false);
+    let error = signal(cx, String::new);
+    let id = document.id.to_string();
+    Ok(view! {
+        <div class="toast toast--page" role="status" data-notice="archived">
+            <span class="toast-icon">(Unescaped::new_unchecked(icon::CHECK_SVG))</span>
+            <p>(format!("「{}」をアーカイブしました", document.title))</p>
+            <button
+                type="button"
+                class="button button--outline button--small"
+                :disabled=$(is_busy.get())
+                @click=$(async |_e: Event| {
+                    is_busy.set(true);
+                    let failure = restore_document(id).await;
+                    if failure.is_none() {
+                        raw!("location.reload()");
+                    } else {
+                        is_busy.set(false);
+                        error.set(failure.unwrap());
+                    }
+                })
+            >"元に戻す"</button>
+            <button type="button" class="button button--outline button--small" data-action="close-notice">"閉じる"</button>
+            form_error(error: &error)
+        </div>
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use galley_core::app::project::ProjectInput;
@@ -364,6 +540,105 @@ mod tests {
         assert_eq!(
             restore_document_by_id(&app, &DocumentId::generate().to_string()).await,
             Err("資料が見つかりません".to_owned())
+        );
+        Ok(())
+    }
+
+    async fn create_project(app: &WebApp, slug: &str) -> std::result::Result<Project, String> {
+        app.create_project
+            .execute(&ProjectInput {
+                slug: slug.to_owned(),
+                name: "営業部".to_owned(),
+                description: String::new(),
+                color: "red".to_owned(),
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    async fn notice(
+        app: &WebApp,
+        project: &Project,
+        slug: Option<&str>,
+    ) -> std::result::Result<Option<DocumentId>, String> {
+        archived_notice(app, project, slug)
+            .await
+            .map(|document| document.map(|document| document.id))
+            .map_err(|e| e.to_string())
+    }
+
+    #[tokio::test]
+    async fn archive_document_opens_list_with_notice() -> TestResult {
+        let app = test_app::new().await;
+        let sales = create_project(&app, "sales").await?;
+        let hr = create_project(&app, "hr").await?;
+        let plan = app.document(sales.id, "plan", "事業計画", 2).await;
+        app.document(sales.id, "memo", "メモ", 1).await;
+        let other = app.document(hr.id, "hiring", "採用計画", 1).await;
+        app.archive(&other).await;
+
+        // アーカイブする前は通知を出さない
+        assert_eq!(notice(&app, &sales, Some("plan")).await?, None);
+
+        assert_eq!(
+            archive_document_by_slug(&app, "sales", "plan").await?,
+            "/sales?archived=plan"
+        );
+        let listed = app
+            .list_documents
+            .execute(&DocumentQuery {
+                project_id: Some(sales.id),
+                ..DocumentQuery::default()
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        let titles: Vec<&str> = listed.iter().map(|item| item.title.as_str()).collect();
+        assert_eq!(titles, ["メモ"]);
+        assert_eq!(notice(&app, &sales, Some("plan")).await?, Some(plan.id));
+
+        // 合図が無い、アーカイブしていない、無い、ほかのプロジェクトの資料には出さない
+        assert_eq!(notice(&app, &sales, None).await?, None);
+        assert_eq!(notice(&app, &sales, Some("memo")).await?, None);
+        assert_eq!(notice(&app, &sales, Some("nope")).await?, None);
+        assert_eq!(notice(&app, &sales, Some("Not A Slug")).await?, None);
+        assert_eq!(notice(&app, &sales, Some("hiring")).await?, None);
+
+        // 戻したあと（通知の「元に戻す」）は出さない
+        restore_document_by_id(&app, &plan.id.to_string()).await?;
+        assert_eq!(notice(&app, &sales, Some("plan")).await?, None);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn archive_document_rejects_archived_missing_and_archived_project() -> TestResult {
+        let app = test_app::new().await;
+        let sales = create_project(&app, "sales").await?;
+        app.document(sales.id, "plan", "事業計画", 1).await;
+        app.document(sales.id, "memo", "メモ", 1).await;
+
+        archive_document_by_slug(&app, "sales", "plan").await?;
+        assert_eq!(
+            archive_document_by_slug(&app, "sales", "plan").await,
+            Err("この資料はすでにアーカイブしています".to_owned())
+        );
+        assert_eq!(
+            archive_document_by_slug(&app, "sales", "nope").await,
+            Err("資料が見つかりません".to_owned())
+        );
+        assert_eq!(
+            archive_document_by_slug(&app, "nope", "memo").await,
+            Err("プロジェクトが見つかりません".to_owned())
+        );
+
+        app.archive_project
+            .execute(sales.id)
+            .await
+            .map_err(|e| e.to_string())?;
+        let rejected = archive_document_by_slug(&app, "sales", "memo").await;
+        assert!(
+            rejected.as_ref().is_err_and(|message| message
+                .starts_with("アーカイブしたプロジェクトの資料は、1件ずつはアーカイブできません")),
+            "{rejected:?}"
         );
         Ok(())
     }

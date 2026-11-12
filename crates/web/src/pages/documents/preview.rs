@@ -13,12 +13,15 @@ use galley_core::domain::{
 use topcoat::{
     Result,
     context::{Cx, app_context},
-    runtime::shard,
+    runtime::{shard, signal},
     view::{Unescaped, View, ViewExt, view},
 };
 
 use super::{found, host};
-use crate::{WebApp, author, date, icon};
+use crate::{
+    WebApp, author, date, icon,
+    pages::archive::{archive_confirm, archive_menu_item},
+};
 
 /// プレビュー欄に出す直近の版の数。
 const RECENT_REVISIONS: u32 = 3;
@@ -50,6 +53,9 @@ pub async fn document_preview(cx: &Cx, key: String) -> Result<impl View> {
     });
     let now = date::now();
     let time_zone = now.time_zone().clone();
+    // 「アーカイブ」の確認を出している資料（`<プロジェクト>/<資料>`。別の行を選んだら隠れる）
+    let confirming = signal(cx, String::new);
+    let (project_slug, document_slug) = (project.slug.to_string(), document.slug.to_string());
 
     Ok(view! {
         <div class="preview-frame-box">
@@ -84,14 +90,22 @@ pub async fn document_preview(cx: &Cx, key: String) -> Result<impl View> {
                 </button>
                 <details class="menu">
                     <summary class="button button--outline button--icon" aria-label="そのほかの操作" title="そのほかの操作">
-                        (Unescaped::new_unchecked(MORE_SVG))
+                        (Unescaped::new_unchecked(icon::MORE_SVG))
                     </summary>
                     <div class="menu-list">
                         <a class="menu-item" href=(path.clone()) target="_blank" rel="noopener">"新しいタブで開く"</a>
                         <a class="menu-item" href=(format!("{path}/history"))>"版の履歴"</a>
+                        archive_menu_item(key: format!("{project_slug}/{document_slug}"), confirming: &confirming)
                     </div>
                 </details>
             </div>
+            archive_confirm(
+                class: "preview-confirm",
+                project: project_slug,
+                document: document_slug,
+                title: &title,
+                confirming: &confirming,
+            )
             <section class="preview-history" aria-labelledby="preview-history-title">
                 <div class="preview-section-head">
                     <h3 id="preview-history-title">"版の履歴"</h3>
@@ -173,5 +187,3 @@ impl Preview {
         }))
     }
 }
-
-const MORE_SVG: &str = r#"<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>"#;

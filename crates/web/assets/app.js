@@ -161,10 +161,10 @@
     }
   });
 
-  // そのほかの操作のメニューは、外を押したら閉じる
+  // そのほかの操作のメニューは、外を押したら閉じる。メニューの項目（「アーカイブ」など）を押したときも閉じる
   document.addEventListener("click", (event) => {
     document.querySelectorAll("details.menu[open]").forEach((menu) => {
-      if (!menu.contains(event.target)) menu.open = false;
+      if (!menu.contains(event.target) || event.target.closest(".menu-item")) menu.open = false;
     });
   });
 
