@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        脆弱性は公開の Issue にせず、[SECURITY.md](https://github.com/yuya-take/galley/blob/develop/SECURITY.md) の手順で報告してください。
+        脆弱性は公開の Issue にせず、[SECURITY.md](https://github.com/yuya-take/galley-docs/blob/develop/SECURITY.md) の手順で報告してください。
   - type: textarea
     id: what-happened
     attributes:
