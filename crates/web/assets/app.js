@@ -202,7 +202,8 @@
     // shard が描き直すと入れ替わるので、そのつど探す
     const results = () => searchDialog.querySelector("[data-search-results]");
     const shownOptions = () => [...searchDialog.querySelectorAll('[role="option"]:not([hidden])')];
-    const isMac = /Mac|iPhone|iPad/.test(navigator.userAgentData?.platform ?? navigator.platform ?? "");
+    // userAgentData は "macOS"、navigator.platform は "MacIntel" を返す
+    const isMac = /mac|iphone|ipad/i.test(navigator.userAgentData?.platform ?? navigator.platform ?? "");
 
     // Mac 以外はキーの表示を Ctrl K にする
     if (!isMac) {
