@@ -4,6 +4,7 @@ use super::{Document, DocumentListItem, DocumentQuery, DocumentSlug};
 use crate::domain::{
     blob::Blob,
     error::RepositoryError,
+    project::Project,
     revision::Revision,
     shared::{DocumentId, ProjectId},
 };
@@ -35,6 +36,12 @@ pub trait DocumentRepository: Send + Sync {
     async fn update(&self, document: &Document) -> Result<(), RepositoryError>;
 
     async fn find_by_id(&self, id: DocumentId) -> Result<Option<Document>, RepositoryError>;
+
+    /// 資料と、資料が属するプロジェクトを返す。版を追加する前に、プロジェクトのアーカイブを確かめるのに使う。
+    async fn find_with_project(
+        &self,
+        id: DocumentId,
+    ) -> Result<Option<(Document, Project)>, RepositoryError>;
 
     /// アーカイブした資料も対象にする。
     async fn find_by_slug(

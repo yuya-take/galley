@@ -16,10 +16,12 @@ pub use text::{
 
 use crate::domain::shared::ProjectId;
 
-/// プロジェクトに資料を登録できないとき。
+/// プロジェクトに資料を登録できない・資料に版を追加できないとき。
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ProjectError {
-    #[error("アーカイブしたプロジェクトには資料を登録できません。先にアーカイブから戻してください")]
+    #[error(
+        "アーカイブしたプロジェクトには、資料の登録も新しい版の追加もできません。先にプロジェクトをアーカイブから戻してください"
+    )]
     Archived,
 }
 
@@ -79,7 +81,8 @@ impl Project {
         self.archived_at.is_some()
     }
 
-    /// 新しい資料を登録できるか。アーカイブしたプロジェクトには登録できない。
+    /// 新しい資料の登録と、資料への新しい版の追加（過去の版に戻すことも含む）を受け付けるか。
+    /// アーカイブしたプロジェクトでは、どちらもできない。
     pub fn ensure_accepts_documents(&self) -> Result<(), ProjectError> {
         if self.is_archived() {
             return Err(ProjectError::Archived);
@@ -130,6 +133,21 @@ mod tests {
 
         project.restore();
         assert!(!project.is_archived());
+    }
+
+    #[test]
+    fn archived_project_rejects_documents() {
+        let mut project = Project::create(profile("sales"), Timestamp::UNIX_EPOCH);
+        assert_eq!(project.ensure_accepts_documents(), Ok(()));
+
+        project.archive(Timestamp::from_second(100).unwrap());
+        assert_eq!(
+            project.ensure_accepts_documents(),
+            Err(ProjectError::Archived)
+        );
+
+        project.restore();
+        assert_eq!(project.ensure_accepts_documents(), Ok(()));
     }
 
     #[test]

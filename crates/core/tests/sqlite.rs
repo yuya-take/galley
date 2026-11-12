@@ -23,7 +23,7 @@ use galley_core::{
         error::RepositoryError,
         project::Project,
         revision::{AuthorName, NewRevision, RevisionMessage, RevisionNumber, RevisionSource},
-        shared::{ArchiveFilter, ProjectId},
+        shared::{ArchiveFilter, DocumentId, ProjectId},
     },
 };
 use jiff::{Timestamp, ToSpan};
@@ -408,6 +408,37 @@ async fn archived_documents_and_projects_are_hidden() -> TestResult {
     assert_eq!(
         fixture.titles(DocumentQuery::default()).await?,
         ["メモ", "事業計画"]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn find_with_project_returns_owning_project() -> TestResult {
+    let fixture = Fixture::new().await?;
+    fixture.create_project("sales", "営業部").await?;
+    let hr = fixture.create_project("hr", "人事部").await?;
+    let plan = fixture
+        .create_document(&hr, "plan", "採用計画", "佐藤", at(0)?)
+        .await?;
+    ArchiveProject::new(Arc::new(fixture.database.projects()))
+        .execute(hr.id)
+        .await?;
+
+    let (document, project) = fixture
+        .documents
+        .find_with_project(plan.id)
+        .await?
+        .ok_or("資料がない")?;
+    assert_eq!(document, plan);
+    assert_eq!(project.id, hr.id);
+    assert!(project.is_archived());
+
+    assert_eq!(
+        fixture
+            .documents
+            .find_with_project(DocumentId::generate())
+            .await?,
+        None
     );
     Ok(())
 }
