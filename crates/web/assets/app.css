@@ -1212,8 +1212,8 @@ a.archive-title:hover { text-decoration: underline; }
 .viewer-frame { flex-grow: 1; width: 100%; border: 0; background: var(--color-paper); }
 .viewer-empty { margin: auto; color: var(--color-text-muted); }
 
-/* 登録した直後の通知 */
-.viewer-toast {
+/* 操作した直後の通知（登録した直後など）。置いた箱の右上に出す */
+.toast {
   position: absolute;
   top: 16px;
   right: 16px;
@@ -1228,10 +1228,10 @@ a.archive-title:hover { text-decoration: underline; }
   font-size: 13px;
   color: var(--sidebar-text);
 }
-.viewer-toast p { margin: 0; font-weight: 700; }
-.viewer-toast-icon { display: inline-flex; color: var(--color-gold); }
-.viewer-toast .button--outline { border-color: var(--sidebar-raised-line); color: var(--sidebar-text); }
-.viewer-toast .button--outline:hover { background: var(--sidebar-raised); }
+.toast p { margin: 0; font-weight: 700; }
+.toast-icon { display: inline-flex; color: var(--color-gold); }
+.toast .button--outline { border-color: var(--sidebar-raised-line); color: var(--sidebar-text); }
+.toast .button--outline:hover { background: var(--sidebar-raised); }
 
 @media (max-width: 900px) {
   .viewer-bar { flex-wrap: wrap; }

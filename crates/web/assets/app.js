@@ -343,14 +343,15 @@
       event.preventDefault();
       location.href = href;
     });
-
-    // 登録した直後の通知。再読み込みや URL のコピーで出し直さないよう、URL から ?registered= を消す
-    const notice = viewer.querySelector("[data-registered-notice]");
-    if (notice) {
-      const url = new URL(location.href);
-      url.searchParams.delete("registered");
-      history.replaceState(history.state, "", url);
-      notice.querySelector("[data-action=close-notice]")?.addEventListener("click", () => notice.remove());
-    }
   }
+
+  // ---- 操作した直後の通知 ----
+  // 合図のクエリ（data-notice の値。?registered= など）を付けて開くと、サーバーが通知を出す。
+  // 再読み込みや URL のコピーで出し直さないよう、表示したら URL から消す
+  document.querySelectorAll("[data-notice]").forEach((notice) => {
+    const url = new URL(location.href);
+    url.searchParams.delete(notice.dataset.notice);
+    history.replaceState(history.state, "", url);
+    notice.querySelector("[data-action=close-notice]")?.addEventListener("click", () => notice.remove());
+  });
 })();

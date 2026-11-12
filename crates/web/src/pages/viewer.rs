@@ -484,12 +484,12 @@ pub(super) fn revert_note(latest: RevisionNumber) -> String {
     )
 }
 
-/// 登録した直後の通知。「閉じる」と、URL から `?registered=` を消す処理は `assets/app.js`。
+/// 登録した直後の通知。「閉じる」と、URL から `?registered=` を消す処理は `assets/app.js`（`data-notice`）。
 #[component]
 async fn registered_toast(message: String, path: String) -> Result<impl View> {
     Ok(view! {
-        <div class="viewer-toast" role="status" data-registered-notice="">
-            <span class="viewer-toast-icon">(Unescaped::new_unchecked(CHECK_SVG))</span>
+        <div class="toast" role="status" data-notice="registered">
+            <span class="toast-icon">(Unescaped::new_unchecked(CHECK_SVG))</span>
             <p>(message)</p>
             <button type="button" class="button button--outline button--small" data-copy-link=(path)>
                 <span data-copy-label="">"リンクをコピー"</span>
